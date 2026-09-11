@@ -6,7 +6,7 @@ import discord
 from discord.ext import commands
 from flask import Flask
 
-Khởi động Web Server giả lập để UptimeRobot "báo thức" 24/7
+#Khởi động Web Server giả lập để UptimeRobot "báo thức" 24/7
 app = Flask('')
 
 @app.route('/')
