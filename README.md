@@ -1,2 +1,0 @@
-# bypassbot0.1
-.
