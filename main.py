@@ -30,6 +30,21 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def on_ready():
     print(f"🌸 Bot da online thanh cong voi ten: {bot.user} ✨")
 
+@bot.command(name="bypass")
+async def bypass(ctx, *, link: str = None):
+    if not link:
+        await ctx.send("🌸 Sếp vui lòng nhập kèm link cần bypass nha! Ví dụ: `!bypass https://link...` 🎀")
+        return
+    
+    # Gửi tin nhắn đang xử lý cho Sếp đỡ sốt ruột
+    await ctx.send(f"⏳ Đang tiến hành bypass link cho Sếp: `{link}`... Chờ em một chút xíu nha! ✨")
+    
+    # --- KHU VỰC THÊM THUẬT TOÁN BYPASS CỦA SẾP Ở ĐÂY ---
+    # Hiện tại em viết mẫu kết quả trả về, Sếp có thể thay logic thật vào nhé:
+    ket_qua = f"✨ Đã bypass thành công link của Sếp:\n||{link}||"
+    
+    await ctx.send(ket_qua)
+
 @bot.command(name="ping")
 async def ping(ctx):
     await ctx.send(f"Pong! Do tre hien tai la: {round(bot.latency * 1000)}ms 🎀")
