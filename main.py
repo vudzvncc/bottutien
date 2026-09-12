@@ -65,8 +65,7 @@ async def trangthai(ctx):
     user_id = ctx.author.id
     if user_id not in database_tu_tien:
         await ctx.send(f"⚠️ Đạo hữu chưa có tên trong tông môn! Hãy gõ `!nhapmon` trước nha Sếp! 🌸")
-        return
-    
+        return        
     info = database_tu_tien[user_id]
     canh_gioi_hien_tai = DANH_SACH_CANH_GIOI[info["canh_gioi_idx"]]
     
@@ -90,6 +89,15 @@ async def bequan(ctx):
     database_tu_tien[user_id]["tu_vi"] += diem_tang
     
     await ctx.send(f"🧘 **{database_tu_tien[user_id]['name']}** bế quan hấp thu thiên địa linh khí thành công!\n📈 Tu vi tăng thêm: `+{diem_tang}` điểm. 🌸✨")
+
+@bot.command(name="xoataikhoan")
+async def xoataikhoan(ctx):
+    user_id = ctx.author.id
+    if user_id in database_tu_tien:
+        del database_tu_tien[user_id]
+        await ctx.send(f"🗑️ Đạo hữu **{ctx.author.name}** đã tự phế tu vi, rời khỏi tông môn thành công! Gõ `!nhapmon` để bái sư lại từ đầu nhé! 🌸")
+    else:
+        await ctx.send(f"⚠️ Sếp đã có tên trong tông môn đâu mà xóa nè! 🎀")
 
 @bot.command(name="dotpha")
 async def dotpha(ctx):
