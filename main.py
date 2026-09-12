@@ -1,4 +1,3 @@
--- File: main.py
 import os
 import threading
 import random
