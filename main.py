@@ -28,13 +28,12 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Database RAM tạm thời lưu trữ thông tin đạo hữu
-# Cấu trúc: { user_id: {"name": str, "tu_vi": int, "can_cot": str, "linh_thach": int, "canh_gioi_idx": int} }
 database_tu_tien = {}
 
 DANH_SACH_CANH_GIOI = [
     "Luyện Khí Kỳ", "Trúc Cơ Kỳ", "Kết Đan Kỳ", 
     "Nguyên Anh Kỳ", "Hóa Thần Kỳ", "Luyện Hư Kỳ", 
-    "Hợp Thể Kỳ", "Đại乘 (Đại Thừa) Kỳ", "Độ Kiếp Kỳ", "Phi Thăng Tiên Nhân"
+    "Hợp Thể Kỳ", "Đại Thừa Kỳ", "Độ Kiếp Kỳ", "Phi Thăng Tiên Nhân"
 ]
 
 @bot.event
@@ -90,7 +89,7 @@ async def bequan(ctx):
     diem_tang = random.randint(80, 350)
     database_tu_tien[user_id]["tu_vi"] += diem_tang
     
-    await ctx.send(f"🧘 **{info_name(user_id)}** bế quan hấp thu thiên địa linh khí thành công!\n📈 Tu vi tăng thêm: `+{diem_tang}` điểm. 🌸✨")
+    await ctx.send(f"🧘 **{database_tu_tien[user_id]['name']}** bế quan hấp thu thiên địa linh khí thành công!\n📈 Tu vi tăng thêm: `+{diem_tang}` điểm. 🌸✨")
 
 @bot.command(name="dotpha")
 async def dotpha(ctx):
@@ -106,19 +105,16 @@ async def dotpha(ctx):
         await ctx.send(f"👑 Đạo hữu đã đạt đến cảnh giới tối cao **Phi Thăng Tiên Nhân**, vô địch thiên hạ rồi! 🌸✨")
         return
     
-    # Yêu cầu tu vi để đột phá mỗi cấp
     tu_vi_can = (current_idx + 1) * 1000
     if info["tu_vi"] < tu_vi_can:
         await ctx.send(f"❌ Tu vi chưa đủ để đột phá!\n⚡ Sếp cần ít nhất **{tu_vi_can}** điểm tu vi (Hiện tại: {info['tu_vi']}). Cố gắng `!bequan` thêm nha! 🌸")
         return
     
-    # Tỷ lệ thành công đột phá (70%)
     if random.random() < 0.7:
         info["canh_gioi_idx"] += 1
         moi_canh_gioi = DANH_SACH_CANH_GIOI[info["canh_gioi_idx"]]
         await ctx.send(f"🎉 ⚡ **THÀNH CÔNG ĐỘT PHÁ!** ⚡\nĐạo hữu đã vượt qua thiên kiếp, bước chân vào cảnh giới: **{moi_canh_gioi}**! 🌸🎆")
     else:
-        # Phạt nhẹ nếu thất bại
         mat_tu_vi = 150
         info["tu_vi"] = max(0, info["tu_vi"] - mat_tu_vi)
         await ctx.send(f"💥 **ĐỘT PHÁ THẤT BẠI!** Thiên lôi đánh cho tơi tả, tu vi bị hao hụt mất `{mat_tu_vi}` điểm. Đạo hữu hãy tĩnh tâm thử lại sau nhé! 🥺💔")
@@ -131,7 +127,7 @@ async def thamhiem(ctx):
         return
     
     su_kien = [
-        ("Khám phá Thượng古 Di Tích", 200, 50),
+        ("Khám phá Thượng Cổ Di Tích", 200, 50),
         ("Đánh bại Yêu Thú hoang dã", 150, 30),
         ("Hái được Linh Chi ngàn năm", 300, 100),
         ("Đi nhầm vào cấm địa, suýt mất mạng", -50, 0)
@@ -142,10 +138,6 @@ async def thamhiem(ctx):
     database_tu_tien[user_id]["linh_thach"] += linh_thach_thu
     
     await ctx.send(f"🗺️ **Kết quả thám hiểm:** {ten_su_kien}!\n📈 Nhận được: `+{thu_vi_thu} Tu Vi` và `+{linh_thach_thu} Linh Thạch` 🌸✨")
-
-@bot.command(name="codep")
-def info_name(user_id):
-    return database_tu_tien[user_id]["name"]
 
 @bot.command(name="ping")
 async def ping(ctx):
