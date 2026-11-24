@@ -1,0 +1,2266 @@
+// language: JavaScript, file: gtf.user.js, target: Userscript (Tampermonkey/Violentmonkey/Kiwi), Mobile/Desktop
+// ==UserScript==
+// @name         PHƯƠNG MEOWMEOW🇻🇳 V9.1 (Fixed Center G)
+// @namespace    lunar.gtraffic
+// @version      9.1.0
+// @description  Auto GTraffic, TrafficSo1 & TaskTrafficNgon — Auto Submit, Direct Fallback, Fixed Center G
+// @author       PHƯƠNG MEOWMEOW🇻🇳
+// @copyright    PHƯƠNG MEOWMEOW🇻🇳
+// @match        *://*/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=gtraffic.io
+// @grant        GM_xmlhttpRequest
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_registerMenuCommand
+// @grant        GM_addStyle
+// @grant        unsafeWindow
+// @connect      *
+// @run-at       document-start
+// @noframes
+// ==/UserScript==
+
+// ============================================================ PHƯƠNG MEOWMEOW🇻🇳 v9.1.0
+(function(){
+'use strict';
+
+// ============================================================
+// 1. ANTI-DETECT (Bypass DevTools & Focus Bypass)
+// ============================================================
+(function applyStealth(){
+    try { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); } catch(_){}
+    try {
+        if (!window.chrome) window.chrome = {};
+        if (!window.chrome.runtime) window.chrome.runtime = {};
+        if (!window.chrome.app) window.chrome.app = { isInstalled: false };
+    } catch(_){}
+    try {
+        const makePlugins = () => {
+            const arr = [
+                { name: 'PDF Viewer', filename: 'internal-pdf-viewer' },
+                { name: 'Chrome PDF Viewer', filename: 'internal-pdf-viewer' },
+                { name: 'Chromium PDF Viewer', filename: 'internal-pdf-viewer' }
+            ];
+            arr.item = i => arr[i];
+            arr.namedItem = n => arr.find(p => p.name === n);
+            return arr;
+        };
+        Object.defineProperty(navigator, 'plugins', { get: makePlugins });
+        Object.defineProperty(navigator, 'mimeTypes', { get: () => [{ type: 'application/pdf' }] });
+    } catch(_){}
+    try {
+        const originalOuterWidth = window.outerWidth;
+        const originalOuterHeight = window.outerHeight;
+        Object.defineProperty(window, 'outerWidth', { get: () => originalOuterWidth || window.innerWidth });
+        Object.defineProperty(window, 'outerHeight', { get: () => originalOuterHeight || window.innerHeight });
+        Object.defineProperty(window, 'innerWidth', { get: () => originalOuterWidth || window.innerWidth });
+        Object.defineProperty(window, 'innerHeight', { get: () => originalOuterHeight || window.innerHeight });
+    } catch(_){}
+    try {
+        Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
+        Object.defineProperty(document, 'hidden', { get: () => false });
+        document.hasFocus = () => true;
+        window.hasFocus = () => true;
+        setInterval(() => {
+            try {
+                window.dispatchEvent(new Event('focus'));
+                document.dispatchEvent(new Event('visibilitychange'));
+            } catch(e) {}
+        }, 2000);
+    } catch(e) {}
+    try {
+        const noop = () => {};
+        window.console = window.console || {};
+        Object.keys(window.console).forEach(k => { try { window.console[k] = noop; } catch(e){} });
+    } catch(_){}
+    try {
+        const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+        HTMLCanvasElement.prototype.toDataURL = function(...args) {
+            try {
+                const ctx = this.getContext('2d');
+                if (ctx && this.width && this.height) {
+                    const img = ctx.getImageData(0, 0, this.width, this.height);
+                    for (let i=0; i<10; i++) {
+                        const idx = Math.floor(Math.random() * img.data.length / 4) * 4;
+                        img.data[idx] = Math.max(0, Math.min(255, img.data[idx] + Math.floor(Math.random()*5)-2));
+                    }
+                    ctx.putImageData(img, 0, 0);
+                }
+            } catch(_) {}
+            return origToDataURL.apply(this, args);
+        };
+    } catch(_){}
+})();
+
+
+// ============================================================
+// 2. HUMANSIM ENGINE
+// ============================================================
+const HumanSim = (function(){
+    const rng = {
+        gauss(mean=0, std=1){ let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random(); return mean + std*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); },
+        int(min,max){ return Math.floor(min+Math.random()*(max-min+1)); },
+        float(min,max){ return min+Math.random()*(max-min); },
+        chance(p){ return Math.random()<p; }
+    };
+    let mouseX = window.innerWidth/2, mouseY = window.innerHeight/2;
+
+    function dispatchMousemove(x,y){
+        try{ document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:Math.round(x),clientY:Math.round(y),screenX:Math.round(x),screenY:Math.round(y),view:window})); }catch(_){}
+    }
+    function dispatchMouseEvent(el,type,x,y){
+        try{ el.dispatchEvent(new MouseEvent(type,{bubbles:true,clientX:Math.round(x),clientY:Math.round(y),screenX:Math.round(x),screenY:Math.round(y),button:0,buttons:type==='mousedown'?1:0,view:window})); }catch(_){}
+    }
+    async function sleep(ms){ return new Promise(r=>setTimeout(r,Math.max(0,ms))); }
+
+    function isMobileViewport(){
+        try{
+            const w = window.innerWidth || document.documentElement.clientWidth;
+            if(w < 768) return true;
+            if(window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+            if('ontouchstart' in window && navigator.maxTouchPoints > 0 && w < 1024) return true;
+        }catch(_){}
+        return false;
+    }
+
+    function makeTouch(target, x, y, id, force){
+        try{
+            return new Touch({
+                identifier: id, target: target,
+                clientX: Math.round(x), clientY: Math.round(y),
+                screenX: Math.round(x), screenY: Math.round(y),
+                pageX: Math.round(x + window.scrollX), pageY: Math.round(y + window.scrollY),
+                radiusX: 2.5 + Math.random()*2, radiusY: 2.5 + Math.random()*2,
+                rotationAngle: Math.random()*360,
+                force: force !== undefined ? force : (0.5 + Math.random()*0.5)
+            });
+        }catch(_){ return null; }
+    }
+
+    function dispatchTouch(el, type, touches, changed){
+        try{
+            el.dispatchEvent(new TouchEvent(type, {
+                bubbles: true, cancelable: true, composed: true, view: window,
+                touches: touches || [], targetTouches: touches || [],
+                changedTouches: changed || touches || []
+            }));
+        }catch(_){}
+    }
+
+    async function touchTap(el, opts={}){
+        if(!el) return false;
+        const r = el.getBoundingClientRect();
+        if(r.width < 2 || r.height < 2) return false;
+        const tx = r.left + r.width * rng.float(0.25, 0.75);
+        const ty = r.top + r.height * rng.float(0.25, 0.75);
+        try{ el.scrollIntoView({block:'center',behavior:'smooth'}); await sleep(rng.float(100,300)); }catch(_){}
+        const t0 = makeTouch(el, tx, ty, 1, 0.4);
+        if(!t0) return false;
+        dispatchTouch(el, 'touchstart', [t0], [t0]);
+        await sleep(rng.float(20, 50));
+        const moves = rng.int(1,2);
+        for(let i=0;i<moves;i++){
+            const jx = tx + rng.gauss(0, 1.5);
+            const jy = ty + rng.gauss(0, 1.5);
+            const tm = makeTouch(el, jx, jy, 1, 0.6);
+            if(tm) dispatchTouch(el, 'touchmove', [tm], [tm]);
+            await sleep(rng.float(10, 20));
+        }
+        const tx2 = tx + rng.gauss(0, 1.2);
+        const ty2 = ty + rng.gauss(0, 1.2);
+        const tEnd = makeTouch(el, tx2, ty2, 1, 0.5);
+        if(tEnd) dispatchTouch(el, 'touchend', [], [tEnd]);
+        try{ dispatchMouseEvent(el, 'click', tx2, ty2); }catch(_){}
+        try{ el.click(); }catch(_){}
+        await sleep(rng.float(50, 150));
+        return true;
+    }
+
+    async function touchScroll(dir='down', distance=null){
+        const dist = distance || rng.float(400, 800);
+        const sign = dir === 'down' ? 1 : -1;
+        const startX = rng.float(120, window.innerWidth - 120);
+        const startY = dir === 'down' ? window.innerHeight * 0.75 : window.innerHeight * 0.25;
+        const targetY = startY - sign * dist;
+        const el = document.elementFromPoint(startX, startY) || document.body;
+        if(!el) return;
+        let t = makeTouch(el, startX, startY, 1, 0.3);
+        if(!t) return;
+        dispatchTouch(el, 'touchstart', [t], [t]);
+        await sleep(rng.float(30, 60));
+        const steps = rng.int(4, 8);
+        let lastY = startY;
+        for(let i=1;i<=steps;i++){
+            const ratio = i/steps;
+            const ease = 1 - Math.pow(1 - ratio, 1.8);
+            const y = startY + (targetY - startY) * ease + rng.gauss(0, 2);
+            const x = startX + rng.gauss(0, 1.5);
+            const tm = makeTouch(el, x, y, 1, 0.5);
+            if(tm) dispatchTouch(el, 'touchmove', [tm], [tm]);
+            try{ window.scrollBy(0, (y - lastY) * 0.8); }catch(_){}
+            lastY = y;
+            await sleep(rng.float(5, 15));
+        }
+        const tf = makeTouch(el, startX + rng.gauss(0,2), targetY, 1, 0.2);
+        if(tf) dispatchTouch(el, 'touchend', [], [tf]);
+        await sleep(rng.float(100, 300));
+    }
+
+    return {
+        sleep, isMobileViewport,
+        async mouseMoveTo(tx,ty){
+            const steps = rng.int(15, 25);
+            const sx = mouseX, sy = mouseY;
+            for(let i=0;i<=steps;i++){
+                const t = i/steps;
+                const x = sx + (tx-sx)*t + rng.gauss(0,1.5);
+                const y = sy + (ty-sy)*t + rng.gauss(0,1.5);
+                mouseX = x; mouseY = y;
+                dispatchMousemove(mouseX, mouseY);
+                await sleep(rng.float(5,15));
+            }
+            mouseX = tx; mouseY = ty;
+        },
+        async click(el, opts={}){
+            if(!el) return false;
+            const mobile = isMobileViewport();
+            if(mobile){ return await touchTap(el, opts); }
+            if(opts.scroll !== false){
+                try{ el.scrollIntoView({block:'center',behavior:'smooth'}); await sleep(rng.float(100,300)); }catch(_){}
+            }
+            const r = el.getBoundingClientRect();
+            if(r.width < 2 || r.height < 2) return false;
+            const tx = r.left + r.width * rng.float(0.2,0.8);
+            const ty = r.top + r.height * rng.float(0.2,0.8);
+            await this.mouseMoveTo(tx,ty);
+            await sleep(rng.float(50,150));
+            dispatchMouseEvent(el,'mouseover',tx,ty);
+            dispatchMouseEvent(el,'mouseenter',tx,ty);
+            dispatchMouseEvent(el,'mousedown',tx,ty);
+            await sleep(rng.float(50,100));
+            dispatchMouseEvent(el,'mouseup',tx,ty);
+            dispatchMouseEvent(el,'click',tx,ty);
+            try{ el.click(); }catch(_){}
+            await sleep(rng.float(100,250));
+            return true;
+        },
+        touchTap, touchScroll,
+        async type(el, text){
+            if(!el) return false;
+            try{ el.focus({preventScroll:true}); await sleep(100); }catch(_){}
+            const isInput = el.tagName==='INPUT'||el.tagName==='TEXTAREA';
+            const setter = isInput ? Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set : null;
+            if(isInput){ try{ setter.call(el,''); el.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){} await sleep(100); }
+            let val = isInput ? (el.value||'') : '';
+            for(let i=0;i<text.length;i++){
+                const ch = text[i];
+                try{ el.dispatchEvent(new KeyboardEvent('keydown',{key:ch,bubbles:true})); }catch(_){}
+                if(isInput){ val += ch; try{ setter.call(el,val); }catch(_){} el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:ch})); }
+                try{ el.dispatchEvent(new KeyboardEvent('keyup',{key:ch,bubbles:true})); }catch(_){}
+                if(rng.chance(0.05)) await sleep(rng.float(200, 400));
+                else await sleep(rng.float(30,100));
+            }
+            return true;
+        },
+        async scroll(){
+            if(isMobileViewport()){
+                const rounds = rng.int(2, 4);
+                for(let i=0;i<rounds;i++){
+                    await touchScroll('down', rng.float(400, 800));
+                    await sleep(rng.float(300, 800));
+                    if(rng.chance(0.4)){
+                        await touchScroll('up', rng.float(50, 150));
+                        await sleep(rng.float(200, 500));
+                    }
+                }
+                return;
+            }
+            const rounds = rng.int(2, 4);
+            for(let i=0;i<rounds;i++){
+                const px = rng.float(400, 800);
+                try{ window.scrollBy({top: px, behavior:'smooth'}); }catch(_){}
+                await sleep(rng.float(300, 800));
+                if(rng.chance(0.4)){
+                    try{ window.scrollBy({top: -rng.float(50, 150), behavior:'smooth'}); }catch(_){}
+                    await sleep(rng.float(200, 500));
+                }
+            }
+        },
+        async scrollToElement(el){
+            let attempts = 0;
+            while(attempts < 10){
+                const r = el.getBoundingClientRect();
+                if(r.top > 100 && r.bottom < window.innerHeight - 100) return;
+                if(r.top > window.innerHeight - 100) {
+                    const dist = r.top - window.innerHeight + 200;
+                    try{ window.scrollBy({top: Math.min(dist, 400), behavior:'smooth'}); }catch(_){}
+                }
+                else if(r.top < 100) {
+                    const dist = r.top - 150;
+                    try{ window.scrollBy({top: Math.max(dist, -400), behavior:'smooth'}); }catch(_){}
+                }
+                await sleep(rng.float(100,200));
+                attempts++;
+            }
+        },
+        async wander(){
+            for(let i=0;i<rng.int(1,3);i++){
+                if(isMobileViewport()){
+                    try{ await touchScroll(rng.chance(0.7)?'down':'up', rng.float(200, 400)); }catch(_){}
+                } else {
+                    await this.mouseMoveTo(rng.float(50, window.innerWidth-50), rng.float(50, window.innerHeight-50));
+                }
+                await sleep(rng.float(100,300));
+            }
+        }
+    };
+})();
+
+const SPEED={
+    fastMin:20,fastMax:80,
+    midMin:60,midMax:180,
+    slowMin:150,slowMax:400,
+    codePollInterval:300,
+    codePollMaxWait:480000,
+    tabCloseDelay:400,
+    finishMinWait:3000,finishVerifyWait:2500,
+    targetSiteTimeout:30000,
+    targetDwellMin:3000,targetDwellMax:5000,
+    postClickDwellMin:1500,postClickDwellMax:3000
+};
+
+const CONFIG={
+    langs:'vie+eng',
+    ocrTimeoutMs:20000,
+    workerTimeoutMs:30000,
+    scriptLoadTimeoutMs:15000,
+    stepTimeout:60000,
+    countdownPollInterval:300,
+    codeRegex:/^[A-Za-z0-9]{6,12}$/,
+    codeBlacklist:/^(avengers|facebook|youtube|instagram|welcome|continue|sunwin|midcland|global|loading|please|submit|confirm|success|link|direct|google|twitter|discord|telegram|zalo|messenger|linkedin|tiktok|javascript|function|document|window|noti|code|minh|dang|nhan|thuc|tuc|cho|xac|kiem|tra|vui|long|tat|che|do|an|danh|hitclub|tasktraffic|ngon|fun88yeti|mc80bet)/i,
+    tesseractCdns:['https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js','https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js','https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js'],
+    workerOptions:{workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/worker.min.js',corePath:'https://cdn.jsdelivr.net/npm/tesseract-core@5.1.0/tesseract-core-simd.wasm.js',langPath:'https://tessdata.projectnaptha.com/4.0.0'},
+    colorMask:{blueLink:{rMax:100,gMax:100,bMin:120,bOverR:30},purple:{rMin:80,rMax:200,gMax:100,bMin:120,bOverG:30}},
+    minTextHeight:10,
+    hintThresholds:{substring:0.95,wholeFuzzy:0.72,tokenFuzzy:0.80},
+    hintRetryMax:2,
+    hintRetryDelayMs:500,
+    googleMaxPollMs: 6000,
+    googlePollIntervalMs: 250,
+    googlePageNextDelayMs: 1500,
+    targetFailedTimeout: 300000,
+    centerTolerancePx: 15,
+    errorPagePatterns:[/ERR_NAME_NOT_RESOLVED/i,/ERR_CONNECTION_/i,/ERR_INTERNET_/i,/ERR_ADDRESS_/i,/ERR_SSL_/i,/ERR_TIMED_OUT/i,/ERR_EMPTY_RESPONSE/i,/ERR_CERT_/i,/ERR_BLOCKED_BY/i,/ERR_NETWORK_/i,/ERR_FAILED/i,/DNS_PROBE_/i],
+    errorPageTextPatterns:[/Không thể truy cập trang web/i,/Không thể tìm thấy địa chỉ IP/i,/Không thể kết nối/i,/trang này không hoạt động/i,/This site can.t be reached/i,/Server IP address could not be found/i,/Check your internet connection/i],
+    selectors:{
+        mainBtn:['#gtr2-trade-btn','#trade-btn-clfs1','.gtr2-trade-btn','.trade-btn-clfs1','.trade-btn-clf'],
+        btnContainer:['.trade-btn-clfs1-container','.trade-btn-clf-container','.gtr2-trade-btn-container'],
+        btnContent:['.trade-btn-clfs1__content','.trade-btn-clfs1-content','.trade-btn-clf__content','.gtr2-trade-btn__content','.gtr2-copy-allowed'],
+        btnLogo:['img.logo-svg-us','svg.logo-svg-us','svg#avt-btn','.gtr2-logo-svg-us','#gtr2-avt-btn'],
+        captchaBox:['.captcha-box','.captcha-box-wrapper','.gtr2-verify-container'],
+        keywordImage:['img[alt="Từ khóa nhiệm vụ"]','img[alt*="khóa"]','img[alt*="Từ khóa"]','.gallery-item img[src^="data:image"]','img[src^="data:image"]'],
+        googleHintImage:['img[alt="Ảnh tìm kiếm"]','img[alt*="tìm kiếm"]','img[src*="cdn.gtraffic.io/i?t="]','img[src*="gtraffic.io/i?"]'],
+        codeInput:['input[placeholder="Nhập mã xác nhận"]','input[placeholder*="xác nhận"]','input[type="text"][placeholder*="mã"]','input.font-mono'],
+        submitButton:['button:has-text("NHẬP MÃ XÁC NHẬN")','button:has-text("XÁC NHẬN")','button:has-text("GỬI MÃ")','button.rounded-primary','button[class*="rounded-primary"]'],
+        getLinkButton:['a[href*="trycloudflare.com/task/finish"]','a[href*="/task/finish/"]','a:has-text("LẤY LINK")','a:has-text("Lấy link")'],
+        refreshKeywordBtn:['button:has-text("ĐỔI TỪ KHÓA MỚI")','button:has-text("Đổi từ khóa")','a:has-text("ĐỔI TỪ KHÓA MỚI")','a:has-text("Đổi từ khóa")','button[class*="refresh"]']
+    }
+};
+
+const DEFAULT_MAP={};
+
+function extractHost(s){if(!s)return'';try{let t=String(s).trim();t=t.replace(/^https?:\/\//i,'').replace(/\/.*$/,'').replace(/^www\./i,'');return t.toLowerCase()}catch(_){return''}}
+function normalizeEntry(e){if(typeof e==='string')return{domain:extractHost(e)||e,hint:''};if(e&&typeof e==='object'&&e.domain)return{domain:extractHost(String(e.domain))||String(e.domain),hint:String(e.hint||'')};return null}
+function loadMap(){try{const s=GM_getValue('keywordMap',null);const src=s?Object.assign({},DEFAULT_MAP,s):{...DEFAULT_MAP};const out={};for(const k of Object.keys(src)){const arr=Array.isArray(src[k])?src[k]:[src[k]];out[k]=arr.map(normalizeEntry).filter(Boolean)}return out}catch(e){return{...DEFAULT_MAP}}}
+function saveMap(m){GM_setValue('keywordMap',m)}
+function normalize(s){return(s||'').toLowerCase().replace(/\s+/g,' ').trim()}
+
+function cleanupKeyword(kw){
+    if(!kw) return '';
+    let s = String(kw).toLowerCase();
+    s = s.replace(/https?:\/\/\S+/g, ' ');
+    s = s.replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+){1,4}\b/gi, ' ');
+    s = s.replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+    return s;
+}
+
+function lookupEntries(kw){
+    const m=loadMap();
+    const k=normalize(kw);
+    const kClean = normalize(cleanupKeyword(kw));
+    for(const[kw2,entries]of Object.entries(m)){
+        const kw2n = normalize(kw2);
+        if(kw2n===k || kw2n===kClean) return entries.slice();
+    }
+    for(const[kw2,entries]of Object.entries(m)){
+        const kw2n = normalize(kw2);
+        if(kClean && (kClean.includes(kw2n) || kw2n.includes(kClean))) return entries.slice();
+    }
+    for(const[kw2,entries]of Object.entries(m)){
+        const kw2n = normalize(kw2);
+        if(k.includes(kw2n)) return entries.slice();
+    }
+    return [];
+}
+
+function cleanHintString(str) {
+    if (!str) return '';
+    return String(str)
+        .normalize('NFC')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+function levenshtein(a, b) {
+    const m = a.length;
+    const n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            dp[i][j] = Math.min(
+                dp[i - 1][j] + 1,
+                dp[i][j - 1] + 1,
+                dp[i - 1][j - 1] + cost
+            );
+        }
+    }
+    return dp[m][n];
+}
+
+function getSimilarity(s1, s2) {
+    const dist = levenshtein(s1, s2);
+    const maxLen = Math.max(s1.length, s2.length);
+    if (maxLen === 0) return 1.0;
+    return 1.0 - (dist / maxLen);
+}
+
+function exactHintMatch(mapEntry, hintTexts){
+    if(!mapEntry || !mapEntry.hint) return false;
+    const mapClean = cleanHintString(mapEntry.hint);
+    if (mapClean.length < 5) return false;
+    const ocrJoined = hintTexts.join(' ');
+    const ocrClean = cleanHintString(ocrJoined);
+    if (ocrClean.length < 5) return false;
+
+    if (ocrClean.includes(mapClean) || mapClean.includes(ocrClean)) {
+        console.log(`[HINT MATCH] ✓ Substring 100%`);
+        return true;
+    }
+
+    let bestScore = 0;
+    const mapLen = mapClean.length;
+    const windowSizes = [mapLen, Math.floor(mapLen * 0.9), Math.floor(mapLen * 1.1)];
+
+    for (const winSize of windowSizes) {
+        if (winSize <= 0 || winSize > ocrClean.length) continue;
+        for (let i = 0; i <= ocrClean.length - winSize; i++) {
+            const sub = ocrClean.substring(i, i + winSize);
+            const score = getSimilarity(mapClean, sub);
+            if (score > bestScore) bestScore = score;
+            if (score >= 0.90) {
+                console.log(`[HINT MATCH] ✓ Fuzzy 90% (Score: ${(score*100).toFixed(1)}%)`);
+                return true;
+            }
+        }
+    }
+    console.log(`[HINT MATCH] ✗ Tạch. Best Score: ${(bestScore*100).toFixed(1)}% | Map: "${mapClean}" | OCR: "${ocrClean}"`);
+    return false;
+}
+
+function pickEntry(entries, hintTexts){
+    if(!entries||!entries.length) return {__unresolved:true, reason:'no-entries'};
+    const texts = (hintTexts||[]).filter(Boolean);
+    if(!texts.length){
+        log(`⚠ pickEntry: KHÔNG có hint OCR → không chọn bừa`,'warn');
+        return {__unresolved:true, reason:'no-hint-data', entries};
+    }
+
+    const matched = entries.filter(e => exactHintMatch(e, texts));
+
+    if(!matched.length){
+        log(`⚠ pickEntry: HINT OCR KHÔNG KHỚP BẤT KỲ entry nào trong map. DỪNG.`,'warn');
+        return {__unresolved:true, reason:'no-match', entries, hintTexts:texts};
+    }
+
+    if(matched.length > 1){
+        log(`⚠ pickEntry: Có ${matched.length} entry cùng khớp hint → chọn đại entry đầu tiên.`,'warn');
+        return matched[0];
+    }
+
+    log(`✓ pickEntry EXACT: "${matched[0].hint}" → ${matched[0].domain}`);
+    return matched[0];
+}
+
+let currentPickMode=GM_getValue('pickMode','rotate');
+let autoMode=GM_getValue('autoMode',false);
+
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+const fastDelay=()=>sleep(SPEED.fastMin+Math.random()*(SPEED.fastMax-SPEED.fastMin));
+const midDelay=()=>sleep(SPEED.midMin+Math.random()*(SPEED.midMax-SPEED.midMin));
+const slowDelay=()=>sleep(SPEED.slowMin+Math.random()*(SPEED.slowMax-SPEED.slowMin));
+const dwellDelay=(min,max)=>sleep(min+Math.random()*(max-min));
+
+const log=(m,...r)=>console.log('%c[PHƯƠNG MEOWMEOW🇻🇳]','color:#facc15;font-weight:bold',m,...r);
+const warn=(m,...r)=>console.warn('%c[PHƯƠNG MEOWMEOW🇻🇳]','color:#f59e0b;font-weight:bold',m,...r);
+function withTimeout(p,ms,label){return Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error(`Timeout ${label} (${ms}ms)`)),ms))])}
+
+function findBySelectors(selectors,root=document){for(const sel of selectors){try{if(sel.startsWith('text=')){const txt=sel.slice(5);const walker=root.createTreeWalker(root.body||root,NodeFilter.SHOW_TEXT,null);let n;while((n=walker.nextNode())){if((n.nodeValue||'').includes(txt))return n.parentElement}continue}if(sel.includes(':has-text(')){const m=sel.match(/^(.+?):has-text\("(.+?)"\)$/);if(m){const[,baseSel,text]=m;const nodes=root.querySelectorAll(baseSel||'button, a, div');for(const n of nodes)if((n.textContent||'').includes(text))return n}continue}const el=root.querySelector(sel);if(el)return el}catch(_){}}return null}
+async function waitFor(selectors,timeout=CONFIG.stepTimeout,root=document){const s=Date.now();while(Date.now()-s<timeout){const el=findBySelectors(selectors,root);if(el)return el;await sleep(200)}return null}
+function setPanelVisibility(v){const p=document.getElementById('gtf-panel');if(!p)return;p.style.display=v?'':'none'}
+async function withPanelHidden(fn){setPanelVisibility(false);await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));try{return await fn()}finally{setPanelVisibility(true)}}
+
+async function hardClickElement(el,opts={}){
+    if(!el)return false;
+    return await withPanelHidden(async()=>{
+        return await HumanSim.click(el, opts);
+    });
+}
+
+function hasSize(el){if(!el)return false;const r=el.getBoundingClientRect();const st=getComputedStyle(el);return r.width>5&&r.height>5&&st.display!=='none'&&st.visibility!=='hidden'&&parseFloat(st.opacity||'1')>0.05}
+
+let gtfServerCodeCache = null;
+
+function isValidCode(s){
+    if(!s)return false;
+    const t=String(s).trim();
+    if(!CONFIG.codeRegex.test(t))return false;
+    if(CONFIG.codeBlacklist.test(t))return false;
+    const hu=/[A-Z]/.test(t);
+    const hl=/[a-z]/.test(t);
+    const hd=/\d/.test(t);
+    return (hu && hl) || (hu && hd) || (hl && hd);
+}
+
+function extractCodeFromText(raw){
+    if(!raw)return null;
+    const s=String(raw).trim();
+    if(isValidCode(s))return s;
+    const matches=s.match(/\b[A-Za-z0-9]{6,12}\b/g);
+    if(matches){
+        for(const cand of matches){
+            if(isValidCode(cand))return cand;
+        }
+    }
+    return null;
+}
+
+function scanServerPayloadForCode(payload){
+    if(!payload) return null;
+    if(typeof payload === 'string'){
+        try{
+            const parsed = JSON.parse(payload);
+            const fromJson = scanServerPayloadForCode(parsed);
+            if(fromJson) return fromJson;
+        }catch(_){}
+        const keyMatch = payload.match(/["']?(?:code|otp|token|verify_code|confirm_code|key|result|data)["']?\s*[:=]\s*["']([A-Za-z0-9]{6,12})["']/i);
+        if(keyMatch && keyMatch[1] && isValidCode(keyMatch[1])) return keyMatch[1];
+        return null;
+    }
+    if(typeof payload === 'object'){
+        const priorityKeys = ['code','otp','token','verifyCode','verify_code','confirmCode','confirm_code','key','value'];
+        for(const k of priorityKeys){
+            if(Object.prototype.hasOwnProperty.call(payload, k)){
+                const val = payload[k];
+                if(typeof val === 'string' && isValidCode(val.trim())) return val.trim();
+            }
+        }
+        for(const v of Object.values(payload)){
+            if(v && typeof v === 'object'){
+                const nested = scanServerPayloadForCode(v);
+                if(nested) return nested;
+            }
+        }
+    }
+    return null;
+}
+
+(function hookServerCodeResponses(){
+    const uw = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
+    try{
+        if(typeof uw.fetch === 'function' && !uw.__gtfFetchHooked){
+            uw.__gtfFetchHooked = true;
+            const origFetch = uw.fetch.bind(uw);
+            uw.fetch = async function(...args){
+                const resp = await origFetch(...args);
+                try{
+                    const clone = resp.clone();
+                    clone.text().then(txt=>{
+                        const found = scanServerPayloadForCode(txt);
+                        if(found) gtfServerCodeCache = found;
+                    }).catch(()=>{});
+                }catch(_){}
+                return resp;
+            };
+        }
+    }catch(_){}
+    try{
+        if(uw.XMLHttpRequest && uw.XMLHttpRequest.prototype && !uw.__gtfXhrHooked){
+            uw.__gtfXhrHooked = true;
+            const origOpen = uw.XMLHttpRequest.prototype.open;
+            const origSend = uw.XMLHttpRequest.prototype.send;
+            uw.XMLHttpRequest.prototype.open = function(...args){
+                this.__gtfUrl = args[1] || '';
+                return origOpen.apply(this, args);
+            };
+            uw.XMLHttpRequest.prototype.send = function(...args){
+                this.addEventListener('load', function(){
+                    try{
+                        if(typeof this.responseText === 'string' && this.responseText){
+                            const found = scanServerPayloadForCode(this.responseText);
+                            if(found) gtfServerCodeCache = found;
+                        }
+                    }catch(_){}
+                });
+                return origSend.apply(this, args);
+            };
+        }
+    }catch(_){}
+})();
+
+function showCodeFallbackBanner(code){
+    if(!code) return;
+    const text = String(code).trim();
+    const old = document.getElementById('gtf-code-fallback-banner');
+    if(old) old.remove();
+    const root = document.body || document.documentElement;
+    if(!root) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'gtf-code-fallback-banner';
+    banner.style.cssText = 'position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0f172a;color:#4ade80;border:2px solid #facc15;border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:800;box-shadow:0 8px 24px rgba(0,0,0,.65);';
+
+    const label = document.createElement('span');
+    label.innerText = `MÃ: ${text} → TỰ ĐỘNG ĐIỀN`;
+
+    banner.appendChild(label);
+    root.appendChild(banner);
+}
+
+function returnToParentTab(){
+    try{ GM_setValue('gtf_return_parent_ts', Date.now()); }catch(_){}
+    try{
+        if(window.opener && !window.opener.closed){
+            try{ window.opener.focus(); }catch(_){}
+        }
+    }catch(_){}
+    try{ window.close(); }catch(_){}
+}
+
+function applyAntiDetect(){
+    try{Object.defineProperty(navigator,'webdriver',{get:()=>undefined})}catch(_){}
+    try{if(!window.chrome)window.chrome={runtime:{}}}catch(_){}
+    try{if(navigator.permissions){const o=navigator.permissions.query.bind(navigator.permissions);navigator.permissions.query=function(p){if(p.name==='notifications')return Promise.resolve({state:Notification.permission});return o(p)}}}catch(_){}
+    try{if(!navigator.plugins||navigator.plugins.length===0){Object.defineProperty(navigator,'plugins',{get:()=>[1,2,3,4,5].map(i=>({name:'Plugin '+i}))})}}catch(_){}
+    try{if(!navigator.languages||navigator.languages.length===0){Object.defineProperty(navigator,'languages',{get:()=>['vi-VN','vi','en-US','en']})}}catch(_){}
+    try{const os=navigator.storage;if(os&&os.estimate){const o=os.estimate.bind(os);os.estimate=async function(){const r=await o();if(r.quota&&r.quota<100*1024*1024)r.quota=500*1024*1024;return r}}}catch(_){}
+    try{Object.defineProperty(navigator,'hardwareConcurrency',{get:()=>8})}catch(_){}
+    try{Object.defineProperty(navigator,'deviceMemory',{get:()=>8})}catch(_){}
+    try{Object.defineProperty(screen,'colorDepth',{get:()=>24})}catch(_){}
+}
+
+let tesseractLoaded=false,tesseractLoadingPromise=null,tesseractWorker=null,tesseractWorkerPromise=null;
+function logPanel(msg,cls='info'){log(msg);const el=document.getElementById('gtf-log');if(el)uiLog(msg,cls)}
+function fetchText(url,timeout=20000){return new Promise((res,rej)=>{GM_xmlhttpRequest({method:'GET',url,timeout,onload:(r)=>r.status>=200&&r.status<300?res(r.responseText):rej(new Error('HTTP '+r.status)),onerror:()=>rej(new Error('network error')),ontimeout:()=>rej(new Error('timeout'))})})}
+function evalScriptIsolated(code){const fn=new Function('window','self','globalThis','module','exports','define','require',code+'\n//# sourceURL=gtf-tesseract.js');fn.call(window,window,window,window,undefined,undefined,undefined,undefined)}
+function locateTesseract(){const cs=[window,globalThis,self];for(const c of cs){try{if(c&&c.Tesseract&&typeof c.Tesseract.createWorker==='function')return c.Tesseract}catch(_){}}try{if(typeof Tesseract!=='undefined'&&Tesseract.createWorker)return Tesseract}catch(_){}return null}
+async function loadTesseract(){if(tesseractLoaded&&locateTesseract())return;if(tesseractLoadingPromise)return tesseractLoadingPromise;tesseractLoadingPromise=(async()=>{for(let i=0;i<CONFIG.tesseractCdns.length;i++){try{const code=await withTimeout(fetchText(CONFIG.tesseractCdns[i]),CONFIG.scriptLoadTimeoutMs,'fetch-tess');evalScriptIsolated(code);const T=locateTesseract();if(T&&typeof T.createWorker==='function'){if(!window.Tesseract)window.Tesseract=T;tesseractLoaded=true;return}}catch(e){}}throw new Error('Tất cả CDN đều fail')})();return tesseractLoadingPromise}
+async function getWorker(){if(tesseractWorker)return tesseractWorker;if(tesseractWorkerPromise)return tesseractWorkerPromise;tesseractWorkerPromise=(async()=>{await loadTesseract();const T=locateTesseract();if(!T||typeof T.createWorker!=='function')throw new Error('Tesseract.createWorker không tồn tại');try{tesseractWorker=await withTimeout(T.createWorker(CONFIG.langs),CONFIG.workerTimeoutMs,'cw-default')}catch(e){tesseractWorker=await withTimeout(T.createWorker(CONFIG.langs,1,CONFIG.workerOptions),CONFIG.workerTimeoutMs,'cw-explicit')}return tesseractWorker})();try{return await tesseractWorkerPromise}catch(e){tesseractWorkerPromise=null;throw e}}
+
+async function ocrKeywordImage(imgEl){if(!imgEl)return'';const w=await getWorker();const r=rasterize(imgEl,2);if(!r)return'';applyBW(r.ctx,r.w,r.h,160);const res=await withTimeout(w.recognize(r.canvas.toDataURL('image/png')),CONFIG.ocrTimeoutMs,'rec-kw');return cleanupText(res.data.text)}
+
+async function ocrGoogleHintImage(imgEl){
+    if(!imgEl)return{colored:'',raw:''};
+    let loadedImg=null;
+    try{
+        const blob=await withTimeout(new Promise((res,rej)=>{
+            GM_xmlhttpRequest({
+                method:'GET', url:imgEl.src, responseType:'blob', timeout:12000,
+                onload:(r)=>r.status>=200&&r.status<300?res(r.response):rej(new Error('HTTP '+r.status)),
+                onerror:()=>rej(new Error('net')), ontimeout:()=>rej(new Error('to'))
+            });
+        }), 14000, 'fetch-hint');
+        const u=URL.createObjectURL(blob);
+        loadedImg=await loadImage(u);
+        URL.revokeObjectURL(u);
+    }catch(e){
+        await ensureImageLoaded(imgEl);
+        loadedImg=imgEl;
+    }
+    if(!loadedImg)return{colored:'',raw:''};
+    const w = await getWorker();
+    let ct='',rt='';
+
+    try{
+        const r=rasterize(loadedImg,2);
+        if(r){
+            applyStrictColorMask(r.ctx,r.w,r.h,CONFIG.minTextHeight*2);
+            const res=await withTimeout(w.recognize(r.canvas.toDataURL('image/png')),CONFIG.ocrTimeoutMs,'rec-hint-color');
+            ct=cleanupText(res.data.text);
+        }
+    }catch(e){}
+
+    if (!ct) {
+        try{
+            const r2=rasterize(loadedImg,2);
+            if(r2){
+                applyBW(r2.ctx,r2.w,r2.h,180);
+                const res2=await withTimeout(w.recognize(r2.canvas.toDataURL('image/png')),CONFIG.ocrTimeoutMs,'rec-hint-raw');
+                rt=cleanupText(res2.data.text);
+            }
+        }catch(e){}
+    }
+    return{colored:ct,raw:rt};
+}
+
+function loadImage(src){return new Promise((res,rej)=>{const img=new Image();img.crossOrigin='anonymous';img.onload=()=>res(img);img.onerror=()=>rej(new Error('Image load fail'));img.src=src})}
+async function ensureImageLoaded(imgEl,timeoutMs=3000){if(imgEl.complete&&imgEl.naturalWidth>0)return true;return await new Promise(res=>{const t=setTimeout(()=>res(false),timeoutMs);imgEl.onload=()=>{clearTimeout(t);res(true)};imgEl.onerror=()=>{clearTimeout(t);res(false)};if(imgEl.complete){clearTimeout(t);res(imgEl.naturalWidth>0)}})}
+function rasterize(imgEl,scale=2){const w=imgEl.naturalWidth||imgEl.width;const h=imgEl.naturalHeight||imgEl.height;if(!w||!h)return null;const c=document.createElement('canvas');c.width=w*scale;c.height=h*scale;const ctx=c.getContext('2d',{willReadFrequently:true});ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.fillStyle='#ffffff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(imgEl,0,0,c.width,c.height);return{canvas:c,ctx,w:c.width,h:c.height}}
+function applyBW(ctx,w,h,th=160){const d=ctx.getImageData(0,0,w,h);const p=d.data;for(let i=0;i<p.length;i+=4){const g=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];const v=g<th?0:255;p[i]=p[i+1]=p[i+2]=v}ctx.putImageData(d,0,0)}
+
+function applyStrictColorMask(ctx,w,h,minH){
+    const imgData=ctx.getImageData(0,0,w,h);
+    const d=imgData.data;
+    const W=w,H=h;
+    const mask=new Uint8Array(W*H);
+    const bl=CONFIG.colorMask.blueLink;
+    const pm=CONFIG.colorMask.purple;
+
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+        const i=(y*W+x)*4;
+        const r=d[i],g=d[i+1],b=d[i+2];
+
+        const isBlue = (b > r + 30) && (b > g + 10) && (b > 100);
+        const isPurple = (r > 60 && b > 80) && (b > g + 30) && (r > g + 10);
+
+        if(isBlue || isPurple) mask[y*W+x]=1;
+    }
+
+    const visited=new Uint8Array(W*H);
+    const stack=[];
+
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+        if(!mask[y*W+x]||visited[y*W+x])continue;
+        stack.length=0;
+        stack.push([x,y]);
+        let minY=y,maxY=y;
+        while(stack.length){
+            const[cx,cy]=stack.pop();
+            if(cx<0||cx>=W||cy<0||cy>=H)continue;
+            if(visited[cy*W+cx])continue;
+            if(!mask[cy*W+cx])continue;
+            visited[cy*W+cx]=1;
+            if(cy<minY)minY=cy;
+            if(cy>maxY)maxY=cy;
+            stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+        }
+        const hgt=maxY-minY+1;
+        if(hgt<minH){
+            stack.length=0;
+            stack.push([x,y]);
+            while(stack.length){
+                const[cx,cy]=stack.pop();
+                if(cx<0||cx>=W||cy<0||cy>=H)continue;
+                if(!mask[cy*W+cx])continue;
+                mask[cy*W+cx]=0;
+                stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+            }
+        }
+    }
+
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+        const i=(y*W+x)*4;
+        const v=mask[y*W+x]?0:255;
+        d[i]=d[i+1]=d[i+2]=v;
+        d[i+3]=255;
+    }
+    ctx.putImageData(imgData,0,0);
+}
+function cleanupText(s){return(s||'').replace(/[^\p{L}\p{N}\s\.\-_/]/gu,' ').replace(/\s+/g,' ').trim()}
+
+const State={get:(k,def=null)=>GM_getValue(k,def),set:(k,v)=>GM_setValue(k,v),clear:()=>['phase','targetDomain','keyword','capturedCode','originUrl','firstClickDone','submitDone','codeFilled','hintText','hintRawText','chosenHint','clickAttempts','workTabOpened','googleFallbackTried'].forEach(k=>GM_setValue(k,null))};
+const PHASE={IDLE:'idle',GOOGLE_SEARCH:'google_search',TARGET_SITE:'target_site',RETURN_GTRAFFIC:'return_gtraffic',GET_LINK:'get_link',DONE:'done',WARMUP:'warmup'};
+
+function performTaskHostReset(reason='auto-reset'){
+    State.clear();
+    GM_setValue('firstClickDone', null);
+    GM_setValue('rotateIdx', 0);
+    GM_setValue('targetSiteFailed', null);
+    GM_setValue('gtf_phase', null);
+    GM_setValue('gtf_targetDomain', null);
+    GM_setValue('gtf_keyword', null);
+    GM_setValue('gtf_captured_code', null);
+    GM_setValue('lastGTrafficUrl', location.href);
+    log(`Reset tool (${reason}) trên ${location.href}`);
+    setTimeout(()=>uiLog(`⟲ Reset (${reason})`,'warn'), 100);
+}
+
+function checkAutoReset(){
+    const isTaskHost = /(^|\.)gtraffic\.io$/i.test(location.hostname) || /(^|\.)trafficso1\.com$/i.test(location.hostname);
+    if(!isTaskHost) return;
+
+    const cur = location.href;
+    const lastUrl = GM_getValue('lastGTrafficUrl', null);
+    let isReload = false;
+    try{
+        const navEntries = performance && performance.getEntriesByType ? performance.getEntriesByType('navigation') : [];
+        if(navEntries && navEntries[0] && navEntries[0].type === 'reload') isReload = true;
+        else if(performance && performance.navigation && performance.navigation.type === 1) isReload = true;
+    }catch(_){}
+
+    if(isReload){
+        performTaskHostReset('reload trang');
+        return;
+    }
+    if(lastUrl && lastUrl !== cur){
+        performTaskHostReset('URL mới');
+        return;
+    }
+    GM_setValue('lastGTrafficUrl', cur);
+}
+
+// ============================================================ UI GTraffic v9.1.0
+GM_addStyle(`
+#gtf-panel{position:fixed;top:10px;right:10px;z-index:2147483646;width:440px;max-width:calc(100vw - 20px);background:#0f172a;color:#f8fafc;border:1px solid rgba(234,179,8,.4);border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:10px;box-shadow:0 10px 25px -5px rgba(0,0,0,.5),0 0 10px rgba(234,179,8,.15);overflow:hidden;user-select:none;pointer-events:none;backdrop-filter:blur(8px)}
+#gtf-panel *{box-sizing:border-box}
+#gtf-panel .gtf-head{display:flex;align-items:center;gap:6px;padding:5px 10px;background:linear-gradient(135deg,#b91c1c 0%,#991b1b 100%);cursor:grab;pointer-events:auto;touch-action:none;border-bottom:1px solid rgba(234,179,8,.3)}
+#gtf-panel .gtf-head:active{cursor:grabbing}
+#gtf-panel .gtf-flag{font-size:12px}
+#gtf-panel .gtf-title{font-weight:800;color:#facc15;letter-spacing:.3px;flex:1;font-size:10.5px;text-shadow:0 1px 2px rgba(0,0,0,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#gtf-panel .gtf-head-btn{background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.15);color:#fff;cursor:pointer;font-size:9px;padding:2px 6px;border-radius:4px;pointer-events:auto;transition:all .2s ease;font-weight:700;line-height:1}
+#gtf-panel .gtf-head-btn:hover{background:rgba(255,255,255,.2)}
+#gtf-panel .gtf-head-btn.reset:hover{background:#ef4444;border-color:#ef4444}
+#gtf-panel .gtf-head-btn.auto-on{background:#16a34a;border-color:#22c55e;box-shadow:0 0 6px #22c55e}
+#gtf-panel .gtf-body{padding:8px 10px;display:flex;flex-direction:column;gap:6px;pointer-events:auto;background:rgba(15,23,42,.95)}
+#gtf-panel.collapsed .gtf-body{display:none}
+#gtf-panel .gtf-grid-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#gtf-panel .gtf-status{display:flex;align-items:center;gap:6px;padding:3px 8px;background:rgba(30,41,59,.7);border:1px solid rgba(255,255,255,.08);border-radius:4px;font-size:9px;color:#cbd5e1;grid-column:span 2}
+#gtf-panel .gtf-dot{width:6px;height:6px;border-radius:50%;background:#64748b;flex-shrink:0}
+#gtf-panel .gtf-dot.active{background:#22c55e;box-shadow:0 0 8px #22c55e;animation:gtf-pulse 1.2s infinite}
+#gtf-panel .gtf-dot.warn{background:#f59e0b;box-shadow:0 0 8px #f59e0b}
+#gtf-panel .gtf-dot.error{background:#ef4444;box-shadow:0 0 8px #ef4444}
+@keyframes gtf-pulse{0%,100%{opacity:1}50%{opacity:.4}}
+#gtf-panel label{font-size:7.5px;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;display:block;font-weight:700}
+#gtf-panel input[type="text"]{width:100%;box-sizing:border-box;padding:4px 6px;background:#020617;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:9px;outline:none;font-family:inherit;transition:border-color .15s}
+#gtf-panel input[type="text"]:focus{border-color:#eab308;box-shadow:0 0 0 1px rgba(234,179,8,.3)}
+#gtf-panel input[type="text"]::placeholder{color:#475569}
+#gtf-panel .gtf-row{display:flex;gap:4px}
+#gtf-panel button.gtf-btn{flex:1;padding:4px 6px;border:none;border-radius:4px;background:linear-gradient(135deg,#eab308 0%,#ca8a04 100%);color:#0f172a;font-weight:800;font-size:8.5px;cursor:pointer;letter-spacing:.3px;font-family:inherit;box-shadow:0 2px 4px rgba(0,0,0,.2);transition:all .15s}
+#gtf-panel button.gtf-btn:hover{filter:brightness(1.1);transform:translateY(-.5px)}
+#gtf-panel button.gtf-btn.ghost{background:#1e293b;color:#e2e8f0;border:1px solid #334155;box-shadow:none}
+#gtf-panel button.gtf-btn.ghost:hover{background:#334155;color:#fff}
+#gtf-panel button.gtf-btn.stop{background:linear-gradient(135deg,#475569 0%,#334155 100%);color:#f8fafc}
+#gtf-panel button.gtf-btn.stop:hover{background:linear-gradient(135deg,#dc2626 0%,#b91c1c 100%)}
+#gtf-panel .gtf-code{padding:4px;background:#020617;border:1px solid rgba(34,197,94,.4);border-radius:4px;font-family:'JetBrains Mono',Consolas,monospace;font-size:10.5px;color:#4ade80;text-align:center;letter-spacing:1.2px;font-weight:800;text-shadow:0 0 6px rgba(74,222,128,.4)}
+#gtf-panel select{width:100%;padding:4px 6px;background:#020617;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:9px;outline:none;cursor:pointer;font-family:inherit}
+#gtf-panel .gtf-hint{padding:4px 6px;background:#020617;border:1px solid #334155;border-radius:4px;font-family:Consolas,monospace;font-size:8px;color:#38bdf8;min-height:14px;word-break:break-all;max-height:32px;overflow-y:auto}
+#gtf-panel .gtf-map{font-size:7.5px;color:#cbd5e1;background:#020617;border:1px solid #334155;border-radius:4px;padding:4px;max-height:60px;overflow-y:auto}
+#gtf-panel .gtf-map-item{padding:1px 0;border-bottom:1px dashed rgba(255,255,255,.08)}
+#gtf-panel .gtf-map-item:last-child{border-bottom:none}
+#gtf-panel .gtf-map-item .kw{color:#facc15;font-weight:700}
+#gtf-panel .gtf-map-item .dm{color:#4ade80;font-family:Consolas,monospace;font-size:7px;display:block;padding-left:4px}
+#gtf-panel .gtf-map-item .dm .hint{color:#38bdf8;font-style:italic}
+#gtf-panel .gtf-map-item .del{color:#ef4444;cursor:pointer;float:right;font-size:8.5px;font-weight:700}
+#gtf-panel .gtf-map-item .del:hover{color:#dc2626}
+#gtf-panel .gtf-log{max-height:65px;overflow-y:auto;background:#020617;border:1px solid #334155;border-radius:4px;padding:4px;font-family:'JetBrains Mono',Consolas,monospace;font-size:7.5px;color:#cbd5e1;line-height:1.35}
+#gtf-panel .gtf-log .ok{color:#4ade80}
+#gtf-panel .gtf-log .err{color:#f87171}
+#gtf-panel .gtf-log .info{color:#38bdf8}
+#gtf-panel .gtf-log .warn{color:#facc15}
+#gtf-panel .gtf-footer{text-align:center;font-size:7px;color:#64748b;padding-top:1px;letter-spacing:.3px;font-weight:700;grid-column:span 2}
+#gtf-panel ::-webkit-scrollbar{width:3px}
+#gtf-panel ::-webkit-scrollbar-track{background:transparent}
+#gtf-panel ::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+`);
+
+function buildPanel(){
+  if(!document.body){
+    if(buildPanel._waiting) return null;
+    buildPanel._waiting = true;
+    let tries = 0;
+    const w = setInterval(()=>{
+      if(document.body){
+        clearInterval(w);
+        buildPanel._waiting = false;
+        try{ buildPanel(); }catch(e){ console.error('[GTF] buildPanel retry fail:', e); }
+      } else if(++tries > 300){
+        clearInterval(w);
+        buildPanel._waiting = false;
+        console.error('[GTF] body không xuất hiện sau 15s — bỏ qua buildPanel');
+      }
+    }, 50);
+    return null;
+  }
+  try{
+    if(document.getElementById('gtf-panel')) return document.getElementById('gtf-panel');
+    const panel=document.createElement('div');panel.id='gtf-panel';
+    panel.innerHTML=`<div class="gtf-head"><span class="gtf-flag">🇻🇳</span><span class="gtf-title">PHƯƠNG MEOWMEOW</span><button class="gtf-head-btn ${autoMode?'auto-on':''}" id="gtf-auto">AUTO</button><button class="gtf-head-btn reset" id="gtf-reset" title="Reset + OCR lại từ đầu">⟲</button><button class="gtf-head-btn" id="gtf-toggle">—</button></div>
+<div class="gtf-body"><div class="gtf-grid-row">
+<div class="gtf-status"><span class="gtf-dot" id="gtf-dot"></span><span id="gtf-status-text">Sẵn sàng</span></div>
+<div><label>Domain GTraffic</label><input type="text" id="gtf-domain" placeholder="vd: midcland.in"></div>
+<div><label>Chế độ chọn</label><select id="gtf-pick"><option value="first">Domain đầu</option><option value="rotate" selected>Xoay vòng</option><option value="random">Random</option></select></div>
+<div style="grid-column:span 2"><div class="gtf-row"><button class="gtf-btn" id="gtf-start">▶ BẮT ĐẦU</button><button class="gtf-btn stop" id="gtf-stop">■ DỪNG</button></div></div>
+<div><label>Mã nhận được</label><div class="gtf-code" id="gtf-code">— — — — — — — —</div></div>
+<div><label>Hint OCR</label><div class="gtf-hint" id="gtf-hint">(chưa có)</div></div>
+<div style="grid-column:span 2"><label>Keyword → Domains</label><div class="gtf-map" id="gtf-map-list"></div><div style="display:flex;gap:3px;margin-top:3px;flex-direction:column"><input type="text" id="gtf-map-kw" placeholder="keyword"><div style="display:flex;gap:3px"><input type="text" id="gtf-map-domain" placeholder="domain" style="flex:2"><input type="text" id="gtf-map-hint" placeholder="hint" style="flex:1"></div></div><div class="gtf-row" style="margin-top:3px"><button class="gtf-btn ghost" id="gtf-map-add">+ THÊM</button><button class="gtf-btn ghost" id="gtf-map-scan">📷 OCR</button></div></div>
+<div style="grid-column:span 2"><label>Log</label><div class="gtf-log" id="gtf-log"></div></div>
+<div class="gtf-footer">© PHƯƠNG MEOWMEOW🇻🇳 • v9.1.0</div>
+</div></div>`;
+    document.body.appendChild(panel);
+
+    const head=panel.querySelector('.gtf-head');let dragging=false,sx=0,sy=0,sl=0,st=0;
+    head.addEventListener('pointerdown',(e)=>{if(e.target.closest('button'))return;dragging=true;sx=e.clientX;sy=e.clientY;const r=panel.getBoundingClientRect();sl=r.left;st=r.top;try{head.setPointerCapture(e.pointerId)}catch(_){}e.preventDefault()});
+    head.addEventListener('pointermove',(e)=>{if(!dragging)return;const dx=e.clientX-sx,dy=e.clientY-sy;const nl=Math.max(0,Math.min(window.innerWidth-60,sl+dx));const nt=Math.max(0,Math.min(window.innerHeight-40,st+dy));panel.style.left=nl+'px';panel.style.top=nt+'px';panel.style.right='auto'});
+    head.addEventListener('pointerup',(e)=>{dragging=false;try{head.releasePointerCapture(e.pointerId)}catch(_){}});
+    head.addEventListener('pointercancel',()=>{dragging=false});
+    panel.querySelector('#gtf-toggle').addEventListener('click',()=>panel.classList.toggle('collapsed'));
+    panel.querySelector('#gtf-auto').addEventListener('click',()=>{autoMode=!autoMode;GM_setValue('autoMode',autoMode);const b=panel.querySelector('#gtf-auto');b.classList.toggle('auto-on',autoMode);uiLog(`AUTO: ${autoMode?'BẬT ✓':'TẮT'}`,autoMode?'ok':'warn');uiStatus(autoMode?'Auto ON':'Sẵn sàng',autoMode?'active':'')});
+
+    panel.querySelector('#gtf-reset').addEventListener('click', async () => {
+      State.clear();
+      GM_setValue('firstClickDone', null);
+      GM_setValue('rotateIdx', 0);
+      GM_setValue('targetSiteFailed', null);
+      GM_setValue('gtf_phase', null);
+      GM_setValue('gtf_targetDomain', null);
+      GM_setValue('gtf_captured_code', null);
+      try { localStorage.clear(); } catch(_){}
+      try { sessionStorage.clear(); } catch(_){}
+      uiCode(null);
+      uiHint(null);
+      uiStatus('Đang Reset sâu...', 'warn');
+      uiLog('⟲ RESET TOÀN BỘ: Xóa sạch State + LocalStorage', 'warn');
+      await sleep(1000);
+      location.reload();
+    });
+
+    const sel=document.getElementById('gtf-pick');if(sel){sel.value=currentPickMode;sel.addEventListener('change',()=>{currentPickMode=sel.value;GM_setValue('pickMode',currentPickMode);uiLog(`Chế độ: ${currentPickMode}`,'info')})}
+    return panel;
+  }catch(e){
+    console.error('[GTF] buildPanel crashed:', e);
+    return null;
+  }
+}
+
+function uiLog(msg,cls=''){const el=document.getElementById('gtf-log');if(!el)return;const line=document.createElement('div');if(cls)line.className=cls;line.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`;el.appendChild(line);el.scrollTop=el.scrollHeight;while(el.childNodes.length>300)el.removeChild(el.firstChild)}
+function uiStatus(text,state=''){const d=document.getElementById('gtf-dot');const t=document.getElementById('gtf-status-text');if(d)d.className='gtf-dot '+state;if(t)t.textContent=text}
+function uiCode(code){const el=document.getElementById('gtf-code');if(!el)return;el.textContent=code?code.split('').join(' '):'— — — — — — — —';el.style.color=code?'#4ade80':'#64748b'}
+function uiHint(text){const el=document.getElementById('gtf-hint');if(!el)return;el.textContent=text||'(chưa có)'}
+function renderMapList(){const list=document.getElementById('gtf-map-list');if(!list)return;list.innerHTML='';const map=loadMap();const keys=Object.keys(map);if(!keys.length){list.innerHTML='<div style="color:#64748b">(trống)</div>';return}for(const k of keys){const entries=map[k];const div=document.createElement('div');div.className='gtf-map-item';let html=`<span class="kw">${k}</span><span class="del" data-kw="${k}">✕</span>`;for(const e of entries){html+=`<span class="dm">→ ${e.domain}`+(e.hint?` <span class="hint">[${e.hint}]</span>`:'')+`</span>`}div.innerHTML=html;list.appendChild(div)}list.querySelectorAll('.del').forEach(b=>{b.addEventListener('click',(e)=>{const kw=e.target.getAttribute('data-kw');const m=loadMap();delete m[kw];saveMap(m);renderMapList();uiLog(`Xoá map: ${kw}`,'info')})})}
+
+function scanCodeInMainBtn(){
+    if(gtfServerCodeCache && isValidCode(gtfServerCodeCache)) return gtfServerCodeCache;
+
+    const sels=[
+        '.trade-btn-clfs1__content',
+        '.trade-btn-clfs1-content',
+        '.gtr2-trade-btn__content',
+        '.gtr2-copy-allowed',
+        '.copy-allowed',
+        '.gtr2-trade-btn',
+        '#gtr2-trade-btn',
+        '#trade-btn-clfs1',
+        '.trade-btn-clfs1',
+        '.trade-btn-clf__content',
+        '.trade-btn-clf'
+    ];
+    for(const sel of sels){
+        const nodes=document.querySelectorAll(sel);
+        for(const el of nodes){
+            if(!el)continue;
+            const direct=extractCodeFromText(el.innerText || el.textContent || '');
+            if(direct)return direct;
+
+            const w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,null);
+            let n;
+            while((n=w.nextNode())){
+                const found=extractCodeFromText(n.nodeValue||'');
+                if(found)return found;
+            }
+
+            const title=el.getAttribute('title') || el.getAttribute('data-code') || el.getAttribute('data-copy');
+            const fromAttr=extractCodeFromText(title||'');
+            if(fromAttr)return fromAttr;
+        }
+    }
+
+    const codeInputs = document.querySelectorAll('input[data-code], [data-code]');
+    for(const item of codeInputs){
+        const dc = extractCodeFromText(item.getAttribute('data-code') || item.value || '');
+        if(dc) return dc;
+    }
+
+    return null;
+}
+
+async function scanCodeWithFallbackOcr(){
+    const domCode=scanCodeInMainBtn();
+    if(domCode)return domCode;
+
+    const btn=document.querySelector('.trade-btn-clfs1__content, .gtr2-trade-btn__content, .gtr2-trade-btn, .trade-btn-clfs1, .trade-btn-clf__content, .trade-btn-clf');
+    if(!btn)return null;
+    const rect=btn.getBoundingClientRect();
+    if(rect.width < 12 || rect.height < 8)return null;
+
+    const txt=(btn.innerText || btn.textContent || '').replace(/\s+/g,'').trim();
+    if(txt.length >= 6 && txt.length <= 14 && !/nhận|mã|xác|click|lấy|đổi|từ|khóa/i.test(txt)){
+        const cleaned=txt.replace(/[^A-Za-z0-9]/g,'');
+        if(isValidCode(cleaned))return cleaned;
+    }
+
+    try{
+        if(!tesseractWorker && !tesseractWorkerPromise)return null;
+        const w=await getWorker();
+        if(typeof window.html2canvas==='function'){
+            const snap=await window.html2canvas(btn,{backgroundColor:'#ffffff',scale:3});
+            const res=await withTimeout(w.recognize(snap.toDataURL('image/png')),8000,'ocr-btn');
+            return extractCodeFromText(res.data.text);
+        }
+    }catch(_){}
+    return null;
+}
+
+async function waitForCodeMainBtn(timeout=180000){
+    const s=Date.now();
+    while(Date.now()-s<timeout){
+        const c=await scanCodeWithFallbackOcr();
+        if(c)return c;
+        await sleep(SPEED.codePollInterval);
+    }
+    return null;
+}
+
+async function resolveEntryByHint(entries, kwText){
+    if(!entries || !entries.length) return {ok:false, reason:'no-entries'};
+    const hintImg = await waitFor(CONFIG.selectors.googleHintImage, 8000);
+    if(!hintImg){
+        logPanel(`⚠ Không thấy ảnh hint`, 'warn');
+        return {ok:false, reason:'no-hint-img'};
+    }
+    let lastResult = null;
+    for(let attempt=1; attempt<=CONFIG.hintRetryMax; attempt++){
+        uiStatus(`OCR hint lần ${attempt}/${CONFIG.hintRetryMax}...`, 'active');
+        let colored='', raw='';
+        try{
+            await ensureImageLoaded(hintImg);
+            const r = await ocrGoogleHintImage(hintImg);
+            colored = r.colored || '';
+            raw = r.raw || '';
+        }catch(e){
+            logPanel(`OCR hint lần ${attempt} throw: ${e.message}`,'warn');
+        }
+        const texts = [colored, raw].filter(Boolean);
+        logPanel(`Lần ${attempt}: hint colored="${colored.substring(0,60)}" | raw="${raw.substring(0,60)}"`, texts.length?'info':'warn');
+        if(!texts.length){
+            lastResult = {ok:false, reason:'ocr-empty', attempt};
+            await sleep(CONFIG.hintRetryDelayMs * attempt);
+            continue;
+        }
+        State.set('hintText', colored);
+        State.set('hintRawText', raw);
+        uiHint(colored || raw);
+
+        const pick = pickEntry(entries, texts);
+        if(pick && !pick.__unresolved){
+            logPanel(`✓ Campaign resolved: ${pick.domain} (lần ${attempt})`,'ok');
+            State.set('chosenHint', pick.hint);
+            return {ok:true, entry:pick, attempt};
+        }
+        lastResult = {ok:false, reason:pick?.reason || 'no-match', attempt, pick, texts};
+        logPanel(`✗ Lần ${attempt} chưa resolve (${lastResult.reason})`,'warn');
+        if(attempt < CONFIG.hintRetryMax){
+            await sleep(CONFIG.hintRetryDelayMs * attempt);
+        }
+    }
+    return {ok:false, ...lastResult, retriesExhausted:true};
+}
+
+async function runStartOCR(){
+    uiStatus('B1: OCR keyword...','active');
+    const kwImg = await waitFor(CONFIG.selectors.keywordImage, 10000);
+    if(!kwImg){ logPanel('Không thấy ảnh keyword','err'); uiStatus('Không thấy ảnh','error'); return null; }
+    logPanel(`Ảnh keyword: ${kwImg.alt||'(no alt)'}`,'info');
+    await ensureImageLoaded(kwImg);
+
+    let kwTextRaw = '';
+    for(let i=1;i<=3;i++){
+        try{ kwTextRaw = await ocrKeywordImage(kwImg); }catch(e){ logPanel(`OCR B1 lần ${i} throw: ${e.message}`,'err'); }
+        if(kwTextRaw){ logPanel(`OCR B1 RAW: "${kwTextRaw}"`,'ok'); break; }
+        await sleep(300);
+    }
+    if(!kwTextRaw){ logPanel('OCR B1 fail','err'); uiStatus('OCR B1 fail','error'); return null; }
+
+    const kwText = cleanupKeyword(kwTextRaw) || kwTextRaw;
+    logPanel(`Keyword cleaned: "${kwText}"`,'info');
+    State.set('keyword', kwText);
+
+    const kwIn = document.getElementById('gtf-map-kw');
+    if(kwIn) kwIn.value = kwText;
+
+    logPanel(`Đang quét OCR Hint...`,'info');
+    await autoScanHintOnly();
+
+    const hintScanned = State.get('hintText') || State.get('hintRawText') || '';
+
+    const entries = lookupEntries(kwText);
+    if(!entries.length){
+        logPanel(`Không có map cho keyword "${kwText}"`,'err');
+        uiStatus('Cần thêm map','warn');
+
+        const hintIn = document.getElementById('gtf-map-hint');
+        if(hintIn && hintScanned) hintIn.value = hintScanned;
+
+        const domainIn = document.getElementById('gtf-domain');
+        if(domainIn) domainIn.value = '';
+
+        try{ alert(`PHƯƠNG MEOWMEOW🇻🇳\n\nKeyword: "${kwText}" chưa có trong Map.\nHint OCR: "${hintScanned}"\n\n→ Hãy nhập DOMAIN ĐÍCH vào ô Map bên dưới và bấm + THÊM.`); }catch(_){}
+        return null;
+    }
+    logPanel(`Keyword "${kwText}" có ${entries.length} campaign`,'info');
+
+    uiStatus('B3: Check hint khớp Map...','active');
+    const resolved = await resolveEntryByHint(entries, kwText);
+
+    if(!resolved.ok){
+        const reasonMap = {
+            'no-hint-img': 'Không thấy ảnh hint',
+            'ocr-empty': 'OCR hint trả rỗng 3 lần',
+            'no-hint-data': 'Map thiếu hint — không phân biệt được',
+            'no-match': 'Hint OCR KHÔNG khớp với map',
+            'weak-match': 'Hint match yếu — không đủ tin cậy',
+            'ambiguous': 'Hint khớp nhiều campaign',
+            'no-entries': 'Không có entry'
+        };
+        const reasonTxt = reasonMap[resolved.reason] || resolved.reason;
+        logPanel(`🛑 DỪNG — ${reasonTxt}. Cần thêm Map mới!`, 'err');
+        uiStatus(`Dừng: Thêm Map mới`, 'error');
+
+        const hintIn = document.getElementById('gtf-map-hint');
+        if(hintIn && hintScanned) hintIn.value = hintScanned;
+
+        const domainIn = document.getElementById('gtf-domain');
+        if(domainIn) domainIn.value = '';
+
+        try{ alert(`PHƯƠNG MEOWMEOW🇻🇳\n\nKeyword: "${kwText}"\nHint OCR: "${hintScanned}"\n\nLý do: ${reasonTxt}\n\n→ Hãy nhập DOMAIN ĐÍCH vào ô Map bên dưới và bấm + THÊM.`); }catch(_){}
+        return null;
+    }
+
+    const chosen = resolved.entry;
+    logPanel(`Chọn domain: ${chosen.domain}${chosen.hint?` (hint: "${chosen.hint}")`:''}`,'ok');
+    const input = document.getElementById('gtf-domain');
+    if(input) input.value = chosen.domain;
+    State.set('targetDomain', chosen.domain);
+    uiStatus(`✓ Đã chọn: ${chosen.domain}`, 'ok');
+    return chosen.domain;
+}
+
+async function autoScanHintOnly(){
+    const hintImg = await waitFor(CONFIG.selectors.googleHintImage, 6000);
+    if(hintImg){
+        await ensureImageLoaded(hintImg);
+        const r = await ocrGoogleHintImage(hintImg);
+        const hint = r.colored || r.raw || '';
+        if(hint){
+            State.set('hintText', r.colored || '');
+            State.set('hintRawText', r.raw || '');
+            const hintIn = document.getElementById('gtf-map-hint');
+            if(hintIn) hintIn.value = hint;
+            uiHint(hint);
+            logPanel(`Auto-scan hint: "${hint.substring(0,60)}..."`,'ok');
+            return hint;
+        }
+    }
+    return '';
+}
+
+let __autoScanRunning = false;
+async function autoScanAndFillInputs(){
+    if(__autoScanRunning) return;
+    __autoScanRunning = true;
+    try{
+        uiStatus('Auto-scan keyword + hint...','active');
+        const kwImg = await waitFor(CONFIG.selectors.keywordImage, 8000);
+        if(kwImg){
+            await ensureImageLoaded(kwImg);
+            const kwRaw = await ocrKeywordImage(kwImg);
+            const kw = cleanupKeyword(kwRaw) || kwRaw;
+            if(kw){
+                const kwIn = document.getElementById('gtf-map-kw');
+                if(kwIn) kwIn.value = kw;
+                logPanel(`Auto-scan keyword: "${kw}"`,'ok');
+            }
+        }
+        await autoScanHintOnly();
+        uiStatus('Sẵn sàng — nhập domain + LƯU MAP','active');
+    }catch(e){
+        logPanel(`Auto-scan loi: ${e.message}`,'warn');
+    }finally{
+        __autoScanRunning = false;
+    }
+}
+
+async function clickRefreshKeyword(){
+    logPanel('Đang tìm nút "ĐỔI TỪ KHÓA MỚI"...','info');
+    const btn = await waitFor(CONFIG.selectors.refreshKeywordBtn, 10000);
+    if(!btn){ logPanel('Không thấy nút đổi từ khóa','err'); uiStatus('Không thấy nút đổi','error'); return false; }
+    const txt = (btn.textContent||'').trim();
+    logPanel(`Click nút: "${txt}"`,'ok');
+    await hardClickElement(btn);
+    uiLog('Đã click đổi từ khóa','ok');
+    return true;
+}
+
+async function handleGTrafficAsProducer(){
+    const originUrl = location.href;
+    const phase = State.get('phase');
+    logPanel(`GTraffic producer, phase: ${phase}`,'info');
+
+    if(phase === PHASE.GOOGLE_SEARCH){
+        const hasCode = State.get('capturedCode') || GM_getValue('gtf_captured_code', null);
+        const tabOpen = State.get('workTabOpened');
+        if(!hasCode && tabOpen !== true){
+            logPanel('⚠ Phase google_search stale → reset','warn');
+            State.clear();
+            State.set('phase', PHASE.IDLE);
+            uiStatus('Sẵn sàng','');
+            return;
+        }
+    }
+
+    const targetFailed = GM_getValue('targetSiteFailed', null);
+    if(targetFailed){
+        logPanel(`⚠ Target site lỗi: ${targetFailed}`,'warn');
+        GM_setValue('targetSiteFailed', null);
+        if(phase===PHASE.GOOGLE_SEARCH || phase===PHASE.TARGET_SITE || phase===PHASE.RETURN_GTRAFFIC){
+            logPanel(`Đổi từ khóa do target lỗi (chờ ${CONFIG.targetFailedTimeout/1000}s)...`,'info');
+            uiStatus(`Đổi từ khóa mới...`,'warn');
+            await sleep(CONFIG.targetFailedTimeout);
+            const clicked = await clickRefreshKeyword();
+            if(clicked){
+                State.clear();
+                GM_setValue('firstClickDone', null);
+                await sleep(2000);
+                logPanel('Đã đổi từ khóa','ok');
+                if(autoMode){
+                    logPanel('🤖 AUTO — chạy lại OCR','ok');
+                    const domain = await runStartOCR();
+                    if(!domain) return;
+                    State.set('originUrl', location.href);
+                    State.set('phase', PHASE.GOOGLE_SEARCH);
+                    State.set('capturedCode', null);
+                    const keyword = State.get('keyword') || domain;
+                    logPanel(`Mở tab work → Google: "${keyword}"`,'ok');
+                    await midDelay();
+                    const tab = window.open(`https://www.google.com/search?q=${encodeURIComponent(keyword)}`, '_blank');
+                    if(tab){ State.set('workTabOpened', true); uiStatus('Chờ code từ tab work...','active'); waitForCodeAndFill(); }
+                    else{
+                        logPanel('Popup bị chặn — tự chuyển trang hiện tại sang Google','warn');
+                        State.set('workTabOpened', true);
+                        uiStatus('Chờ code từ tab work...','active');
+                        location.href = `https://www.google.com/search?q=${encodeURIComponent(keyword)}`;
+                    }
+                } else {
+                    uiStatus('Đã đổi từ khóa — bấm BẮT ĐẦU','warn');
+                }
+                return;
+            }
+        }
+    }
+
+    if(!phase || phase===PHASE.IDLE){
+        if(autoMode){
+            logPanel('🤖 AUTO','ok');
+            const domain = await runStartOCR();
+            if(!domain) return;
+            State.set('originUrl', originUrl);
+            State.set('phase', PHASE.GOOGLE_SEARCH);
+            State.set('capturedCode', null);
+            const keyword = State.get('keyword') || domain;
+
+            const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(keyword)}`;
+            logPanel(`Mở tab work → Google tìm Keyword: "${keyword}"`,'ok');
+
+            try {
+                GM_setValue('gtf_phase', PHASE.TARGET_SITE);
+                GM_setValue('gtf_targetDomain', domain);
+                GM_setValue('gtf_keyword', keyword);
+            } catch(_){}
+
+            await midDelay();
+
+            try{
+                const tab = window.open(searchUrl, '_blank');
+                if(!tab){
+                    logPanel('Popup bị chặn — tự chuyển trang hiện tại sang Google','warn');
+                    location.href = searchUrl;
+                    return;
+                }
+            }catch(e){
+                logPanel(`window.open throw: ${e.message}`,'err');
+                alert('Không mở được tab Google — kiểm tra popup blocker');
+                return;
+            }
+            State.set('workTabOpened', true);
+            uiStatus('Chờ người dùng click...','active');
+            waitForCodeAndFill();
+            return;
+        }
+        return;
+    }
+    if(phase===PHASE.GOOGLE_SEARCH){ uiStatus('Chờ code từ tab work...','active'); waitForCodeAndFill(); return; }
+    if(phase===PHASE.GET_LINK){ await autoClickGetLink(); return; }
+}
+
+async function waitForCodeAndFill(){
+    uiStatus('Chờ code từ tab work...','active');
+    const start=Date.now();let lastLog=0;
+    while(Date.now()-start<SPEED.codePollMaxWait){
+        const targetFailed=GM_getValue('targetSiteFailed',null);
+        if(targetFailed){
+            logPanel(`⚠ Target lỗi: ${targetFailed}`,'warn');
+            GM_setValue('targetSiteFailed',null);
+            State.clear();
+            logPanel('Đổi từ khóa do target lỗi','info');
+            await clickRefreshKeyword();
+            return;
+        }
+
+        const codeFromChild = GM_getValue('gtf_captured_code', null);
+        if (codeFromChild && isValidCode(codeFromChild)) {
+            logPanel(`✓ Nhận code từ tab con: ${codeFromChild}`, 'ok');
+            GM_setValue('gtf_captured_code', null);
+            State.set('capturedCode', codeFromChild);
+            try{ window.focus(); }catch(_){}
+            uiCode(codeFromChild);
+            await midDelay();
+            await autoFillAndSubmitCode(codeFromChild);
+            return;
+        }
+
+        const code=State.get('capturedCode');
+        if(code&&isValidCode(code)){
+            State.set('capturedCode', null);
+            logPanel(`Nhận code từ State: ${code}`,'ok');
+            uiCode(code);
+            await midDelay();
+            await autoFillAndSubmitCode(code);
+            return;
+        }
+
+        if(Date.now()-lastLog>4000){logPanel('Vẫn đang chờ code...','info');lastLog=Date.now()}
+        await sleep(SPEED.codePollInterval);
+    }
+    logPanel('Timeout chờ code','err');uiStatus('Timeout chờ code','error');
+}
+
+async function autoFillAndSubmitCode(code){
+    const input=await waitFor(CONFIG.selectors.codeInput,15000);
+    if(!input){logPanel('Không thấy ô nhập mã','err');uiStatus('Không thấy ô nhập mã','error');return}
+    input.scrollIntoView({block:'center',behavior:'instant'});
+    await fastDelay();
+    uiStatus('Gõ code...','active');
+    
+    // Gõ từng ký tự
+    await HumanSim.type(input, code);
+    await midDelay();
+    
+    logPanel(`👉 Đã gõ mã: ${code}. Tự động nộp mã...`, 'warn');
+    uiStatus('Đã gõ mã - Đang nộp', 'warn');
+    
+    // Tự động submit
+    const submitBtn = findBySelectors(CONFIG.selectors.submitButton);
+    if(submitBtn) {
+        await hardClickElement(submitBtn);
+    } else {
+        // Thử Enter nếu không thấy nút
+        try{
+            input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));
+            input.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));
+        }catch(_){}
+    }
+
+    State.set('phase',PHASE.GET_LINK);
+    logPanel('Đang chờ LẤY LINK...', 'info');
+    
+    // Tự động quét LẤY LINK
+    const checkLinkInterval = setInterval(async () => {
+        const linkBtn = findBySelectors(CONFIG.selectors.getLinkButton);
+        if(linkBtn || document.querySelector('a[href*="trycloudflare.com/task/finish"]')) {
+            clearInterval(checkLinkInterval);
+            logPanel('Đã thấy nút LẤY LINK. Tự động click!', 'ok');
+            await sleep(1000);
+            await autoClickGetLink();
+        }
+    }, 1500);
+}
+
+async function autoClickGetLink(){
+    uiStatus('Chờ LẤY LINK...','active');
+    const btn=await waitFor(CONFIG.selectors.getLinkButton,25000);
+    if(!btn){logPanel('Không thấy LẤY LINK','err');return}
+    const href=btn.getAttribute('href')||btn.href||'(no href)';
+    logPanel(`LẤY LINK: ${href.substring(0,60)}...`,'ok');
+    await hardClickElement(btn);
+    await fastDelay();
+    State.set('phase',PHASE.DONE);
+    uiStatus('Đã click LẤY LINK','ok');
+}
+
+function unwrapGoogleRedirect(href){
+    try{
+        if(!href) return href;
+        if(!/google\./i.test(href)) return href;
+        const u = new URL(href, location.origin);
+        const q = u.searchParams.get('q') || u.searchParams.get('url');
+        if(q && /^https?:\/\//i.test(q)) return q;
+    }catch(_){}
+    return href;
+}
+
+// ============================================================
+// TÌM DOMAIN TRÊN GOOGLE + TRUY CẬP TRỰC TIẾP
+// ============================================================
+async function handleGoogleConsumer(){
+    if(State.get('phase') !== PHASE.GOOGLE_SEARCH) return;
+
+    const targetDomain = extractHost(State.get('targetDomain') || GM_getValue('gtf_targetDomain') || '');
+    const keyword = (State.get('keyword') || '').trim();
+    if(!targetDomain) return;
+
+    logPanel(`Google: keyword "${keyword || '(none)'}", target: "${targetDomain}"`,'info');
+    uiStatus('Đang tìm link Domain...','active');
+
+    let isMoved = false;
+    let pageCount = 1;
+    let attemptsNoResult = 0;
+    const maxNoResultAttempts = 20;
+
+    const finder = setInterval(() => {
+        if (isMoved) return;
+        
+        const links = document.querySelectorAll('a[href]');
+        for(const a of links){
+            try{
+                const rawHref = a.href || '';
+                const realHref = unwrapGoogleRedirect(rawHref);
+                if(!/^https?:\/\//i.test(realHref)) continue;
+                const u = new URL(realHref);
+                
+                const host = u.hostname.replace(/^www\./,'').toLowerCase();
+                if(host === targetDomain || host.includes(targetDomain)){
+                    isMoved = true;
+                    clearInterval(finder);
+                    logPanel(`Đã tìm thấy link ${realHref}`, 'ok');
+                    window.open(realHref, '_blank');
+                    try{ window.close(); }catch(_){}
+                    return;
+                }
+            }catch(_){}
+        }
+
+        attemptsNoResult++;
+        
+        if(attemptsNoResult > maxNoResultAttempts) {
+            const nextBtn = document.querySelector('#pnnext, a[aria-label="Next"], a[aria-label="Trang tiếp theo"]');
+            if (nextBtn && pageCount < 3) {
+                logPanel(`Không thấy Domain. Chuyển sang trang Google ${pageCount + 1}...`, 'warn');
+                pageCount++;
+                attemptsNoResult = 0;
+                try { nextBtn.click(); } catch(e){}
+            } else if (pageCount >= 3) {
+                isMoved = true;
+                clearInterval(finder);
+                logPanel(`❌ Không tìm thấy trên Google. Mở trực tiếp: https://${targetDomain}`, 'warn');
+                window.open(`https://${targetDomain}`, '_blank');
+                try{ window.close(); }catch(_){}
+            }
+        }
+    }, 250);
+}
+
+// ============================================================
+// FIXED CENTER G BUTTON LOGIC (RESTORED)
+// ============================================================
+let gtfCenterLoopTimer = null;
+
+function getBrowserZoomScale(){
+    try{
+        if(window.visualViewport && typeof window.visualViewport.scale === 'number' && window.visualViewport.scale > 0){
+            return Number(window.visualViewport.scale.toFixed(2));
+        }
+    }catch(_){}
+    return 1;
+}
+
+function getViewportCenterCoords(){
+    try{
+        if(window.visualViewport){
+            return {
+                x: window.visualViewport.offsetLeft + window.visualViewport.width / 2,
+                y: window.visualViewport.offsetTop + window.visualViewport.height / 2
+            };
+        }
+    }catch(_){}
+    return {
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2
+    };
+}
+
+function isGreenishElement(el){
+    if(!el) return false;
+    try{
+        const st = window.getComputedStyle(el);
+        const bg = st.backgroundColor || '';
+        const color = st.color || '';
+        const border = st.borderColor || '';
+        const combined = `${bg} ${color} ${border}`;
+        const matches = [...combined.matchAll(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/gi)];
+        for(const m of matches){
+            const r = parseFloat(m[1]);
+            const g = parseFloat(m[2]);
+            const b = parseFloat(m[3]);
+            if(g >= 115 && g > r + 20 && g > b + 15) return true;
+        }
+        const cls = String(el.className || '').toLowerCase();
+        const id = String(el.id || '').toLowerCase();
+        if(/green|success|emerald|lime|gtr2|trade-btn|clf/.test(`${cls} ${id}`)) return true;
+    }catch(_){}
+    return false;
+}
+
+function resolveAnchorElement(el){
+    if(!el || !el.parentElement) return el;
+    const p = el.parentElement;
+    if(p === document.body || p === document.documentElement) return el;
+    try{
+        const rEl = el.getBoundingClientRect();
+        const rP = p.getBoundingClientRect();
+        const stP = window.getComputedStyle(p);
+        const sameRow = Math.abs(rP.top - rEl.top) <= 18 && Math.abs(rP.bottom - rEl.bottom) <= 18;
+        const reasonableBox = rP.width > rEl.width && rP.width <= 260 && rP.height >= rEl.height && rP.height <= 140;
+        if(sameRow && reasonableBox && stP.display !== 'none' && stP.visibility !== 'hidden'){
+            return p;
+        }
+    }catch(_){}
+    return el;
+}
+
+function locateGreenGButton(){
+    const selectors = [
+        '#gtr2-trade-btn',
+        '#trade-btn-clfs1',
+        '.gtr2-trade-btn',
+        '.trade-btn-clfs1',
+        '.trade-btn-clf',
+        '.trade-btn-clfs1-container',
+        '.gtr2-trade-btn__content',
+        '.trade-btn-clfs1__content',
+        '.trade-btn-clfs1-content',
+        '.trade-btn-clf__content',
+        '.gtr2-copy-allowed'
+    ];
+
+    for(const sel of selectors){
+        const nodes = document.querySelectorAll(sel);
+        for(const el of nodes){
+            if(!el || !el.isConnected) continue;
+            const st = window.getComputedStyle(el);
+            const r = el.getBoundingClientRect();
+            if(st.display !== 'none' && st.visibility !== 'hidden' && r.width > 4 && r.height > 4){
+                return resolveAnchorElement(el);
+            }
+        }
+    }
+
+    const all = document.querySelectorAll('button, a, div, span');
+    let best = null;
+    let bestScore = -1;
+
+    for(const el of all){
+        if(!el || !el.isConnected) continue;
+        const r = el.getBoundingClientRect();
+        if(r.width < 10 || r.width > 180 || r.height < 10 || r.height > 180) continue;
+        const txt = (el.textContent || '').trim();
+        const isG = (txt === 'g' || txt === 'G');
+        const hasGChild = !!el.querySelector && Array.from(el.querySelectorAll('span, div, b, strong')).some(c => {
+            const ct = (c.textContent || '').trim();
+            return ct === 'g' || ct === 'G';
+        });
+        if(!isG && !hasGChild) continue;
+
+        const st = window.getComputedStyle(el);
+        if(st.display === 'none' || st.visibility === 'hidden' || parseFloat(st.opacity || '1') <= 0.05) continue;
+
+        let score = 0;
+        if(isG) score += 2;
+        if(hasGChild) score += 1;
+        if(isGreenishElement(el) || (el.parentElement && isGreenishElement(el.parentElement))) score += 5;
+
+        if(score > bestScore){
+            bestScore = score;
+            best = el;
+        }
+    }
+
+    return resolveAnchorElement(best);
+}
+
+function getScrollableContainer(el){
+    let cur = el ? el.parentElement : null;
+    while(cur && cur !== document.documentElement && cur !== document.body){
+        const st = window.getComputedStyle(cur);
+        const oy = st.overflowY || '';
+        const ox = st.overflowX || '';
+        if((oy === 'auto' || oy === 'scroll' || oy === 'overlay') && cur.scrollHeight > cur.clientHeight + 4){
+            return cur;
+        }
+        if((ox === 'auto' || ox === 'scroll' || ox === 'overlay') && cur.scrollWidth > cur.clientWidth + 4){
+            return cur;
+        }
+        cur = cur.parentElement;
+    }
+    return null;
+}
+
+function centerElementInViewportOnce(el){
+    if(!el || !el.isConnected) return { found: true, centered: false, coords: null };
+    const rect = el.getBoundingClientRect();
+    if(rect.width < 1 || rect.height < 1) return { found: true, centered: false, coords: null };
+
+    const vpCenter = getViewportCenterCoords();
+    const elCenterX = rect.left + rect.width / 2;
+    const elCenterY = rect.top + rect.height / 2;
+
+    const deltaX = elCenterX - vpCenter.x;
+    const deltaY = elCenterY - vpCenter.y;
+    const tol = CONFIG.centerTolerancePx || 15;
+
+    if(Math.abs(deltaX) > tol || Math.abs(deltaY) > tol){
+        const subScroll = getScrollableContainer(el);
+        if(subScroll){
+            try{ subScroll.scrollTop += deltaY; }catch(_){}
+            try{ subScroll.scrollLeft += deltaX; }catch(_){}
+        }
+        try{
+            window.scrollBy({
+                left: deltaX,
+                top: deltaY,
+                behavior: 'instant'
+            });
+        }catch(_){
+            try{
+                window.scrollTo(window.scrollX + deltaX, window.scrollY + deltaY);
+            }catch(__){}
+        }
+    }
+
+    const r2 = el.getBoundingClientRect();
+    const vpCenter2 = getViewportCenterCoords();
+    const cx2 = Math.round(r2.left + r2.width / 2);
+    const cy2 = Math.round(r2.top + r2.height / 2);
+    const centered = Math.abs(cx2 - Math.round(vpCenter2.x)) <= tol && Math.abs(cy2 - Math.round(vpCenter2.y)) <= tol;
+
+    return {
+        found: true,
+        centered,
+        coords: { x: cx2, y: cy2, width: Math.round(r2.width), height: Math.round(r2.height) }
+    };
+}
+
+function startCenterGreenGToScreen(){
+    if(gtfCenterLoopTimer) return;
+
+    let lastCoordsKey = '';
+    const tick = ()=>{
+        try{
+            const scale = getBrowserZoomScale();
+            const zoomPct = Math.round(scale * 100);
+            const btn = locateGreenGButton();
+            if(!btn){
+                uiStatus(`Zoom ${zoomPct}% — Đang quét nút G xanh...`, 'active');
+                return;
+            }
+            const res = centerElementInViewportOnce(btn);
+            if(res && res.coords){
+                const key = `${res.coords.x},${res.coords.y}`;
+                if(key !== lastCoordsKey){
+                    lastCoordsKey = key;
+                    logPanel(`Nút G xanh tọa độ (${res.coords.x}, ${res.coords.y}) — Zoom trình duyệt ${zoomPct}%`, res.centered ? 'ok' : 'info');
+                }
+                uiStatus(res.centered ? `G giữa màn (${res.coords.x},${res.coords.y}) • ${zoomPct}%` : `Đang canh giữa G... • ${zoomPct}%`, res.centered ? 'ok' : 'warn');
+            }
+        }catch(_){}
+    };
+
+    tick();
+    gtfCenterLoopTimer = setInterval(tick, 180);
+}
+
+function stopCenterGreenGToScreen(){
+    if(gtfCenterLoopTimer){
+        clearInterval(gtfCenterLoopTimer);
+        gtfCenterLoopTimer = null;
+    }
+}
+
+async function handleTargetSiteConsumer(){
+    const phase = State.get('phase');
+    if(phase !== PHASE.TARGET_SITE) return;
+    applyAntiDetect();
+    gtfServerCodeCache = null;
+    logPanel(`Target site — Dùng zoom/thu phóng trình duyệt + Canh nút G xanh giữa màn hình`, 'info');
+    uiStatus('Đang canh nút G...', 'warn');
+
+    startCenterGreenGToScreen();
+
+    const code = await waitForCodeMainBtn(180000);
+    stopCenterGreenGToScreen();
+
+    if(code){
+        logPanel(`Code: ${code}`,'ok');
+        logPanel(`Đã lưu mã ${code}`, 'ok');
+        GM_setValue('gtf_captured_code', code);
+        State.set('capturedCode', code);
+        showCodeFallbackBanner(code);
+        uiStatus(`Đã lấy mã ${code} — đóng tab về tab mẹ`,'ok');
+        await sleep(SPEED.tabCloseDelay);
+        returnToParentTab();
+    } else {
+        logPanel('Quá 3 phút không có mã. Đổi nhiệm vụ.','err');
+        GM_setValue('targetSiteFailed','no-code: timeout 3 minutes');
+        await sleep(SPEED.tabCloseDelay);
+        returnToParentTab();
+    }
+}
+
+// ============================================================
+// TASK TRAFFIC NGON (tasktrafficngon.cc.cd) LOGIC
+// ============================================================
+const TTN_STICKY_MODE_KEY = 'ttn_sticky_task_mode';
+const TTN_DONE_COUNT_KEY = 'ttn_done_count_by_mode';
+const TTN_NEED_IP_KEY = 'ttn_need_change_ip';
+const TTN_LAST_CLAIMED_TOKEN_KEY = 'ttn_last_claimed_token';
+let ttnBusy = false;
+let ttnBackClickDone = false;
+let ttnBackPollTimer = null;
+
+function getStickyTaskMode(){
+    const v = GM_getValue(TTN_STICKY_MODE_KEY, null);
+    return (v === 'gtraffic' || v === 'trafficso1') ? v : null;
+}
+
+function setStickyTaskMode(type){
+    if(type === 'gtraffic' || type === 'trafficso1'){
+        GM_setValue(TTN_STICKY_MODE_KEY, type);
+    } else {
+        GM_setValue(TTN_STICKY_MODE_KEY, null);
+    }
+}
+
+function getDoneCounts(){
+    try{
+        const raw = GM_getValue(TTN_DONE_COUNT_KEY, null);
+        if(raw && typeof raw === 'object'){
+            return { gtraffic: Number(raw.gtraffic || 0), trafficso1: Number(raw.trafficso1 || 0) };
+        }
+    }catch(_){}
+    return { gtraffic: 0, trafficso1: 0 };
+}
+
+function setDoneCounts(obj){
+    GM_setValue(TTN_DONE_COUNT_KEY, {
+        gtraffic: Number(obj.gtraffic || 0),
+        trafficso1: Number(obj.trafficso1 || 0)
+    });
+}
+
+function isNeedChangeIp(){
+    return !!GM_getValue(TTN_NEED_IP_KEY, false);
+}
+
+function setNeedChangeIp(val){
+    GM_setValue(TTN_NEED_IP_KEY, !!val);
+}
+
+function isRewardLandingPage(){
+    if(!/^\/nhiemvu\/?$/i.test(location.pathname || '')) return false;
+    const params = new URLSearchParams(location.search || '');
+    return !!(params.get('doi-tac') || params.get('token'));
+}
+
+function isNhiemVuPage(){
+    return /^\/nhiemvu\/?$/i.test(location.pathname || '') && !isRewardLandingPage();
+}
+
+function recordCompletedTaskIfNeeded(){
+    if(!isRewardLandingPage()) return;
+    const params = new URLSearchParams(location.search || '');
+    const token = (params.get('token') || location.href).trim();
+    const lastToken = GM_getValue(TTN_LAST_CLAIMED_TOKEN_KEY, null);
+    if(token && token === lastToken) return;
+    GM_setValue(TTN_LAST_CLAIMED_TOKEN_KEY, token);
+
+    const partnerParam = (params.get('doi-tac') || '').toLowerCase();
+    const activeMode = getStickyTaskMode() || (partnerParam.includes('trafficso1') ? 'trafficso1' : 'gtraffic');
+    const counts = getDoneCounts();
+    counts[activeMode] = (counts[activeMode] || 0) + 1;
+    setDoneCounts(counts);
+
+    if(counts[activeMode] >= 2){
+        setNeedChangeIp(true);
+    }
+}
+
+function removeTaskTrafficPanel(){
+    const p = document.getElementById('ttn-panel');
+    if(p) p.remove();
+}
+
+function findTaskCardButton(type){
+    const wantPartner = type === 'gtraffic' ? 'gtraffic' : 'trafficso1';
+    const cards = document.querySelectorAll('.task-card, article');
+    for(const card of cards){
+        const txt = (card.textContent || '').toLowerCase();
+        const hasLogo = !!card.querySelector(`img[src*="${wantPartner}"], img[alt*="${wantPartner}" i]`);
+        if(!hasLogo && !txt.includes(wantPartner)) continue;
+
+        const submitBtn = card.querySelector('form[action*="/nhiemvu/tao-link"] button[type="submit"], button[type="submit"], button.btn-success, a.btn-success');
+        if(submitBtn && !submitBtn.disabled && hasSize(submitBtn)){
+            return submitBtn;
+        }
+    }
+    return null;
+}
+
+function findModalOpenHereBtn(){
+    const modal = document.getElementById('ttn-link-modal');
+    if(!modal) return null;
+    const ready = document.getElementById('ttn-modal-ready');
+    if(ready && ready.hasAttribute('hidden')) return null;
+
+    const btn = modal.querySelector('a#ttn-modal-open-here[href], #ttn-modal-open-here');
+    if(!btn || !hasSize(btn)) return null;
+    const href = (btn.getAttribute('href') || '').trim();
+    if(!href || href === '#' || /^javascript:/i.test(href)) return null;
+    return btn;
+}
+
+function findBackToNhiemVuBtn(){
+    if(isNhiemVuPage()) return null;
+    const root = document.querySelector('main#main-content, main, .main-content') || document.body;
+    if(!root) return null;
+    const candidates = root.querySelectorAll('a.btn.btn-primary, a.btn-primary, a[href*="/nhiemvu"], button.btn-primary, button, a');
+    for(const el of candidates){
+        if(el.closest('#app-nav, .sidebar, .app-header, .workspace-tabs, .app-footer, #ttn-panel')) continue;
+        const txt = (el.innerText || el.textContent || '').toLowerCase().replace(/\s+/g,' ').trim();
+        const href = (el.getAttribute('href') || '').toLowerCase();
+        if(txt.includes('quay về trang nhiệm vụ') || txt.includes('quay về nhiệm vụ') || (el.classList.contains('btn-primary') && href.includes('/nhiemvu'))){
+            return el;
+        }
+    }
+    return null;
+}
+
+async function triggerBackToNhiemVu(el){
+    if(!el) return false;
+    try{ el.scrollIntoView({block:'center',behavior:'instant'}); }catch(_){}
+    await sleep(100);
+    try{ el.click(); }catch(_){}
+    try{
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window,clientX:cx,clientY:cy}));
+    }catch(_){}
+    const href = el.getAttribute('href');
+    if(href && href !== '#' && !/^javascript:/i.test(href)){
+        const resolvedUrl = new URL(href, location.origin).href;
+        setTimeout(()=>{
+            if(!isNhiemVuPage() && location.href !== resolvedUrl){
+                location.href = resolvedUrl;
+            }
+        }, 450);
+    } else {
+        setTimeout(()=>{
+            if(!isNhiemVuPage()){
+                location.href = `${location.origin}/nhiemvu`;
+            }
+        }, 550);
+    }
+    return true;
+}
+
+function startBackToNhiemVuWatcher(){
+    if(ttnBackPollTimer || isNhiemVuPage() || ttnBackClickDone) return;
+    let attempts = 0;
+    ttnBackPollTimer = setInterval(async () => {
+        if(isNhiemVuPage() || ttnBackClickDone){
+            clearInterval(ttnBackPollTimer);
+            ttnBackPollTimer = null;
+            return;
+        }
+        attempts++;
+        const backBtn = findBackToNhiemVuBtn();
+        if(backBtn){
+            ttnBackClickDone = true;
+            clearInterval(ttnBackPollTimer);
+            ttnBackPollTimer = null;
+            logPanel('Tự động click "Quay về trang nhiệm vụ"', 'ok');
+            await triggerBackToNhiemVu(backBtn);
+        } else if(attempts > 200){
+            clearInterval(ttnBackPollTimer);
+            ttnBackPollTimer = null;
+        }
+    }, 250);
+}
+
+function updateTaskTrafficPanelUI(statusText=null, statusColor=null){
+    const panel = document.getElementById('ttn-panel');
+    if(!panel) return;
+    const mode = getStickyTaskMode();
+    const counts = getDoneCounts();
+    const needIp = isNeedChangeIp();
+    const btnG = panel.querySelector('#ttn-btn-gtraffic');
+    const btnT = panel.querySelector('#ttn-btn-trafficso1');
+    const status = panel.querySelector('#ttn-status');
+
+    if(btnG){
+        btnG.innerText = mode === 'gtraffic' ? `● AUTO GTRAFFIC (${counts.gtraffic}/2)` : 'LÀM NHIỆM VỤ GTRAFFIC';
+        btnG.style.outline = mode === 'gtraffic' ? '2px solid #facc15' : 'none';
+    }
+    if(btnT){
+        btnT.innerText = mode === 'trafficso1' ? `● AUTO TRAFFICSO1 (${counts.trafficso1}/2)` : 'LÀM NHIỆM VỤ TRAFFICSO1';
+        btnT.style.outline = mode === 'trafficso1' ? '2px solid #facc15' : 'none';
+    }
+    if(status && statusText){
+        status.innerText = statusText;
+        if(statusColor) status.style.color = statusColor;
+    } else if(status && !statusText){
+        if(needIp && mode){
+            const label = mode === 'gtraffic' ? 'GTraffic' : 'TrafficSO1';
+            status.innerText = `Đã xong 2 link ${label} — HÃY ĐỔI IP!`;
+            status.style.color = '#f87171';
+        } else if(mode){
+            const label = mode === 'gtraffic' ? 'GTraffic' : 'TrafficSO1';
+            status.innerText = `Chế độ AUTO: ${label} (${counts[mode]}/2)`;
+            status.style.color = '#4ade80';
+        } else {
+            status.innerText = 'Sẵn sàng';
+            status.style.color = '#94a3b8';
+        }
+    }
+}
+
+async function runTaskFlow(type){
+    if(ttnBusy) return;
+    ttnBusy = true;
+    try{
+        const status = document.querySelector('#ttn-panel #ttn-status');
+        const label = type === 'gtraffic' ? 'GTraffic' : 'TrafficSO1';
+        updateTaskTrafficPanelUI(`Đang tìm nút tạo link ${label}...`, '#facc15');
+
+        const startBtn = findTaskCardButton(type);
+        if(!startBtn){
+            if(status){
+                status.innerText = `Chưa thấy nút ${label} — đang chờ/đổi IP...`;
+                status.style.color = '#facc15';
+            }
+            return;
+        }
+
+        updateTaskTrafficPanelUI(`Đang click Bắt đầu vượt link ${label}...`, '#facc15');
+        await HumanSim.click(startBtn);
+
+        updateTaskTrafficPanelUI(`Đang chờ tạo link & hiện "Mở Tại Trang Này"...`, '#facc15');
+        const deadline = Date.now() + 20000;
+        let openBtn = null;
+        while(Date.now() < deadline){
+            openBtn = findModalOpenHereBtn();
+            if(openBtn) break;
+            await sleep(250);
+        }
+
+        if(!openBtn){
+            updateTaskTrafficPanelUI(`Không thấy nút "Mở Tại Trang Này"!`, '#ef4444');
+            return;
+        }
+
+        const targetHref = openBtn.getAttribute('href') || '';
+        updateTaskTrafficPanelUI(`Đang mở trang đối tác: ${targetHref.substring(0, 32)}...`, '#4ade80');
+        await HumanSim.click(openBtn);
+        await sleep(400);
+        if(targetHref && /^https?:\/\//i.test(targetHref) && location.href !== targetHref){
+            location.href = targetHref;
+        }
+    }finally{
+        ttnBusy = false;
+    }
+}
+
+function buildTaskTrafficPanel(){
+    if(!isNhiemVuPage()){
+        removeTaskTrafficPanel();
+        return;
+    }
+    if(!document.body) return;
+    if(document.getElementById('ttn-panel')){
+        updateTaskTrafficPanelUI();
+        return;
+    }
+
+    const panel = document.createElement('div');
+    panel.id = 'ttn-panel';
+    panel.style.cssText = `position:fixed;bottom:20px;right:20px;z-index:2147483646;width:260px;background:#0f172a;color:#f8fafc;border:1px solid rgba(234,179,8,.4);border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;box-shadow:0 10px 25px -5px rgba(0,0,0,.5);overflow:hidden;`;
+
+    panel.innerHTML = `
+        <div style="padding:10px;background:linear-gradient(135deg,#b91c1c 0%,#991b1b 100%);font-weight:bold;text-align:center;color:#facc15;">TASK TRAFFIC NGON AUTO</div>
+        <div style="padding:10px;display:flex;flex-direction:column;gap:8px;">
+            <button id="ttn-btn-gtraffic" style="padding:8px;background:#059669;color:#fff;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">LÀM NHIỆM VỤ GTRAFFIC</button>
+            <button id="ttn-btn-trafficso1" style="padding:8px;background:#2563eb;color:#fff;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">LÀM NHIỆM VỤ TRAFFICSO1</button>
+            <div id="ttn-status" style="font-size:10px;color:#94a3b8;text-align:center;">Sẵn sàng</div>
+        </div>
+    `;
+    document.body.appendChild(panel);
+
+    const btnG = panel.querySelector('#ttn-btn-gtraffic');
+    const btnT = panel.querySelector('#ttn-btn-trafficso1');
+
+    btnG.addEventListener('click', () => {
+        setDoneCounts({ gtraffic: 0, trafficso1: 0 });
+        setNeedChangeIp(false);
+        setStickyTaskMode('gtraffic');
+        updateTaskTrafficPanelUI();
+        runTaskFlow('gtraffic');
+    });
+    btnT.addEventListener('click', () => {
+        setDoneCounts({ gtraffic: 0, trafficso1: 0 });
+        setNeedChangeIp(false);
+        setStickyTaskMode('trafficso1');
+        updateTaskTrafficPanelUI();
+        runTaskFlow('trafficso1');
+    });
+
+    updateTaskTrafficPanelUI();
+}
+
+let ttnIpCheckRunning = false;
+
+async function handleTaskTrafficNgon(){
+    recordCompletedTaskIfNeeded();
+    buildTaskTrafficPanel();
+
+    if(!isNhiemVuPage()){
+        startBackToNhiemVuWatcher();
+        const backBtn = findBackToNhiemVuBtn();
+        if(backBtn && !ttnBackClickDone) {
+            ttnBackClickDone = true;
+            if(ttnBackPollTimer){ clearInterval(ttnBackPollTimer); ttnBackPollTimer = null; }
+            logPanel('Tự động click "Quay về trang nhiệm vụ"', 'ok');
+            await sleep(200);
+            await triggerBackToNhiemVu(backBtn);
+        }
+        return;
+    }
+
+    const stickyMode = getStickyTaskMode();
+    const counts = getDoneCounts();
+    if(stickyMode && (isNeedChangeIp() || (counts[stickyMode] || 0) >= 2)){
+        setNeedChangeIp(true);
+        const label = stickyMode === 'gtraffic' ? 'GTraffic' : 'TrafficSO1';
+        updateTaskTrafficPanelUI(`Đã vượt xong 2 link ${label} — Yêu cầu người dùng ĐỔI IP!`, '#f87171');
+        logPanel(`Đã vượt xong 2 link ${label}. Yêu cầu người dùng ĐỔI IP rồi bấm lại nút chế độ.`, 'warn');
+        return;
+    }
+
+    if(stickyMode && !ttnBusy && !ttnIpCheckRunning){
+        const startBtn = findTaskCardButton(stickyMode);
+        if(startBtn){
+            await sleep(700);
+            if(isNhiemVuPage() && !ttnBusy && !ttnIpCheckRunning && !isNeedChangeIp()){
+                await runTaskFlow(stickyMode);
+            }
+        }
+    }
+
+    if(ttnIpCheckRunning) return;
+    const hasIpLimitTag = !!document.querySelector('.tag-danger');
+    const checkBtn = document.querySelector('a[data-check-ip]');
+    if(hasIpLimitTag && checkBtn && hasSize(checkBtn)) {
+        ttnIpCheckRunning = true;
+        logPanel('Bị giới hạn IP. Yêu cầu đổi IP. Đợi 45s...', 'warn');
+        let timeLeft = 45;
+        const interval = setInterval(() => {
+            timeLeft--;
+            logPanel(`Đợi đổi IP... ${timeLeft}s`, 'warn');
+            if(timeLeft <= 0) {
+                clearInterval(interval);
+                ttnIpCheckRunning = false;
+                logPanel('Hết 45s. Tự động click Kiểm tra lại!', 'ok');
+                HumanSim.click(checkBtn);
+            }
+        }, 1000);
+    }
+}
+
+// ============================================================
+// MAIN
+// ============================================================
+async function main(){
+const inIframe=window.top!==window.self;
+if(inIframe){if(State.get('phase')===PHASE.TARGET_SITE){await sleep(300);await handleTargetSiteConsumer()}return}
+applyAntiDetect();
+const host=location.hostname;
+
+// 1. Xử lý TaskTrafficNgon
+if (/tasktrafficngon\.cc\.cd$/.test(host)) {
+    await handleTaskTrafficNgon();
+    return;
+}
+
+// 2. Xử lý Tab Domain (Target Site)
+if (GM_getValue('gtf_phase') === PHASE.TARGET_SITE) {
+    const domain = extractHost(GM_getValue('gtf_targetDomain') || State.get('targetDomain') || '');
+    if (domain && (extractHost(host) === domain || host.includes(domain))) {
+        State.set('phase', PHASE.TARGET_SITE);
+        State.set('targetDomain', domain);
+        logPanel(`✓ Nhận diện tab Domain: ${domain}`, 'ok');
+        await handleTargetSiteConsumer();
+        return;
+    }
+}
+
+// 3. Xử lý GTraffic / TrafficSo1 Producer
+if(/gtraffic\.io/.test(host) || /trafficso1\.com/.test(host)){
+    checkAutoReset();
+
+    const ensurePanel = ()=>{
+      if(document.body){
+        if(!document.getElementById('gtf-panel')){
+          buildPanel();
+          if(document.getElementById('gtf-panel')){
+            renderMapList();uiHint(State.get('hintText'));
+            if(autoMode)uiStatus('Auto ON','active');
+            const _start=document.getElementById('gtf-start');
+            const _stop=document.getElementById('gtf-stop');
+            const _add=document.getElementById('gtf-map-add');
+            const _scan=document.getElementById('gtf-map-scan');
+
+            if(_start&&!_start._bound){_start._bound=true;_start.addEventListener('click',async()=>{
+                State.clear();
+                State.set('phase', PHASE.IDLE);
+                GM_setValue('workTabOpened', null);
+                GM_setValue('gtf_captured_code', null);
+                uiCode(null);uiHint(null);
+                GM_setValue('targetSiteFailed',null);
+
+                let domain = null;
+                try{
+                    domain = await runStartOCR();
+                }catch(e){
+                    logPanel(`runStartOCR throw: ${e.message}`,'err');
+                    domain = null;
+                }
+
+                if(!domain){
+                    logPanel('OCR/hint không resolve được → hủy mở Google','warn');
+                    return;
+                }
+                State.set('phase',PHASE.GOOGLE_SEARCH);
+                State.set('capturedCode',null);
+                const keyword = State.get('keyword') || domain;
+
+                const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(keyword)}`;
+                logPanel(`Mở tab work → Google tìm Keyword: "${keyword}"`,'ok');
+
+                try {
+                    GM_setValue('gtf_phase', PHASE.TARGET_SITE);
+                    GM_setValue('gtf_targetDomain', domain);
+                    GM_setValue('gtf_keyword', keyword);
+                } catch(_){}
+
+                await midDelay();
+
+                try{
+                    const tab = window.open(searchUrl, '_blank');
+                    if(!tab){
+                        logPanel('Popup bị chặn — tự chuyển trang hiện tại sang Google','warn');
+                        location.href = searchUrl;
+                        return;
+                    }
+                }catch(e){
+                    logPanel(`window.open throw: ${e.message}`,'err');
+                    alert('Không mở được tab Google — kiểm tra popup blocker');
+                    return;
+                }
+                State.set('workTabOpened', true);
+                uiStatus('Chờ người dùng click...','active');
+                waitForCodeAndFill();
+            })}
+
+            if(_stop&&!_stop._bound){_stop._bound=true;_stop.addEventListener('click',()=>{stopCenterGreenGToScreen();State.clear();State.set('phase', PHASE.IDLE);uiStatus('Đã dừng','warn');uiCode(null);uiHint(null)})}
+
+            if(_add&&!_add._bound){_add._bound=true;_add.addEventListener('click',async()=>{
+                const kw=(document.getElementById('gtf-map-kw')?.value||'').trim();
+                const dm=extractHost(document.getElementById('gtf-map-domain')?.value||'');
+                const hint=(document.getElementById('gtf-map-hint')?.value||'').trim();
+                if(!kw||!dm){logPanel('Nhập đủ keyword + domain','err');return;}
+                const m=loadMap();
+                if(!m[kw])m[kw]=[];
+                m[kw].push({domain:dm,hint:hint});
+                saveMap(m);
+                renderMapList();
+                document.getElementById('gtf-map-domain').value='';
+                logPanel(`✓ Đã lưu: ${kw} → ${dm}`,'ok');
+                uiStatus('Đã lưu map — đang tự quét lại...','active');
+                await sleep(500);
+                try{ _start.click(); }catch(_){}
+            })}
+
+            if(_scan&&!_scan._bound){_scan._bound=true;_scan.addEventListener('click',async()=>{const kwImg=findBySelectors(CONFIG.selectors.keywordImage);if(kwImg){await ensureImageLoaded(kwImg);const t=await ocrKeywordImage(kwImg);document.getElementById('gtf-map-kw').value=t;logPanel(`OCR kw: "${t}"`,t?'ok':'err')}const hintImg=findBySelectors(CONFIG.selectors.googleHintImage);if(hintImg){const r=await ocrGoogleHintImage(hintImg);document.getElementById('gtf-map-hint').value=r.colored||r.raw||'';uiHint(r.colored||r.raw);logPanel(`OCR hint: "${r.colored||r.raw}"`,'ok')}})}
+          }
+        }
+        return true;
+      }
+      return false;
+    };
+
+    if(!ensurePanel()){
+      if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', ()=>{ ensurePanel(); }, { once:true });
+      }
+      const _poll = setInterval(()=>{ if(ensurePanel()) clearInterval(_poll); }, 50);
+      setTimeout(()=>clearInterval(_poll), 15000);
+    }
+
+    setTimeout(()=>{ try{ autoScanAndFillInputs(); }catch(_){} }, 900);
+
+    await handleGTrafficAsProducer();
+    return;
+}
+
+// 4. Xử lý Google Search
+if(/google\.com/.test(host)){
+    if(State.get('phase') === PHASE.GOOGLE_SEARCH){
+        await handleGoogleConsumer();
+    }
+    return;
+}
+
+if(/trycloudflare\.com$/.test(host))return;
+
+// 5. Xử lý Tab Domain (dự phòng)
+if(State.get('phase')===PHASE.TARGET_SITE){
+    await sleep(300);
+    await handleTargetSiteConsumer();
+    return;
+}
+}
+
+GM_registerMenuCommand('😈 Reset toàn bộ state',()=>{State.clear();GM_setValue('firstClickDone',null);GM_setValue('rotateIdx',0);GM_setValue('lastGTrafficUrl',null);GM_setValue('targetSiteFailed',null);location.reload()});
+GM_registerMenuCommand('© PHƯƠNG MEOWMEOW🇻🇳',()=>{alert('PHƯƠNG MEOWMEOW🇻🇳 v9.1.0\nBản quyền: PHƯƠNG MEOWMEOW🇻🇳')});
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',main);else main();
+})();
